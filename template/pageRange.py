@@ -6,8 +6,13 @@ class PageRange:
 
     def __init__(self, num_columns):
         self.num_columns = num_columns
+        self.num_records = 0
         self.base_page_sets = []
         self.tail_page_sets = []
+        self.rids = {}
+        self.schema_encodings = []
+        self.indirections = []
+        self.timestamps = []
         self.init_base_page_sets()
 
     def init_base_page_sets(self):
@@ -18,7 +23,8 @@ class PageRange:
         self.tail_page_sets.append(PageSet(self.num_columns))
 
     def add_record(self, *columns):
-        pass
+        self.base_page_sets[self.num_records / RECORDS_PER_PAGE].add_record(columns)
+        self.num_records += 1
 
     def remove_record(self):
         pass

@@ -23,3 +23,7 @@ class Page:
             self.data[(self.num_records * 8) + i] = value_in_bytes[i]
 
         self.num_records += 1
+
+    def read(self, record_offset):
+        # convert bytes from data to a 64 bit integer and return value
+        return int.from_bytes(self.data[(record_offset * 8):(record_offset * 8) + 8], "little")
