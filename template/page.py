@@ -8,9 +8,18 @@ class Page:
         self.data = bytearray(PAGE_SIZE)
 
     def has_capacity(self):
-        pass
+        if self.num_records < RECORDS_PER_PAGE:
+            return True
+
+        return False
 
     def write(self, value):
-        self.num_records += 1
-        pass
+        value_in_bytes = []
+        val = value
+        for i in range(8):  # convert 64 bit value into byte sized chunks
+            value_in_bytes.append((val >> 8) & 0x11111111)
 
+        for i in range(8):  # add byte sized chunks to data
+            self.data[(self.num_records * 8) + i] = value_in_bytes[i]
+
+        self.num_records += 1

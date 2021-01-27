@@ -1,4 +1,4 @@
-# Global Setting for the Database
-# PageSize, StartRID, etc..
+START_RID = 42069
 PAGE_SETS = 16
 PAGE_SIZE = 4096
+RECORDS_PER_PAGE = PAGE_SIZE / 8

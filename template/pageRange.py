@@ -16,3 +16,12 @@ class PageRange:
 
     def add_tail_page_set(self):
         self.tail_page_sets.append(PageSet(self.num_columns))
+
+    def add_record(self, *columns):
+        pass
+
+    def remove_record(self):
+        pass
+
+    def update_record(self):
+        pass
