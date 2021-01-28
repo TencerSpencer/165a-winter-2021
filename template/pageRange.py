@@ -9,6 +9,7 @@ class PageRange:
         self.num_records = 0
         self.base_page_sets = []
         self.tail_page_sets = []
+        self.next_rid = 0
         self.__init_base_page_sets()
 
     def __init_base_page_sets(self):
@@ -22,7 +23,7 @@ class PageRange:
         # add record to appropriate page set
         rid = self.create_rid()
         page_set_index = self.get_next_free_base_page_set()
-        self.base_page_sets[page_set_index].write_record(rid, columns)
+        self.base_page_sets[page_set_index].write_base_record(rid, columns)
         self.num_records += 1
         return rid, page_set_index
 
@@ -36,8 +37,10 @@ class PageRange:
     def update_record(self):
         pass
 
-    def create_rid(self): # When we merge, do we continue to keep our pages?
-        return START_RID + self.num_records
+    def create_rid(self):  # When we merge, do we continue to keep our pages?
+        rid = self.next_rid
+        self.next_rid += 1
+        return rid
 
     def get_next_free_base_page_set(self):
         return self.num_records / RECORDS_PER_PAGE
