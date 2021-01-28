@@ -27,11 +27,52 @@ class PageRange:
         self.num_records += 1
         return rid, page_set_index
 
+    # setup is simplistic due to cumulative pages
     def get_record(self, rid, page_set_index, query_columns):
-        return self.base_page_sets[page_set_index].read_record(rid, query_columns)
+
+        # start at the base page, get its schema too
+        base_page_to_read = self.base_page_sets[page_set_index]
+        tail_page = base_page_to_read.get_indirection(rid)
+        
+        # get only the base page's info
+        if tail_page == None:
+            return get_record_only_base(self, rid, page_set_index, query_columns)
+        
+        else:
+
+            read_data = []
+
+            # obtain schema
+            base_page_offset = base_page_to_read.rids[rid]
+            base_page_schema = base_page_to_read.schema_encoding[base_page_offset]
+
+            # filler function that must obtain a tail page handler from a given RID
+            tail_page_to_read = get_tail_page()
+            tail_page_rid = get_tail_page_rid()
+
+            # pointer access isn't as expensive, utilize this to alternate page reads
+            for i in range (self.num_columns):
+                if (query_columns[i] != None):
+                    if (base_page_schema >> i) == 1:
+                        read_data.append(tail_page_to_read.read_record(tail_page_rid, query_columns, i))
+                    else:
+                        read_data.append(base_page_to_read.read_record(rid, query_columns, i))
+            
+            return read_data
+
+                
+    def get_record_only_base(self, rid, page_set_index, query_columns):
+        
+        read_data = []
+        base_page_to_read = self.base_page_sets[page_set_index]
+        for i in range (self.num_columns):
+            read_data.append(base_page_to_read.read_record(rid, query_columns, i))
+        
+        return read_data
+
 
     def remove_record(self):
-        # set given RID to null
+        # set given RID to null in directory
         pass
 
     def update_record(self):
@@ -50,3 +91,4 @@ class PageRange:
             return True
 
         return False
+        

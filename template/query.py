@@ -42,6 +42,7 @@ class Query:
     # Assume that select will never be called on a key that doesn't exist
     """
     def select(self, key, column, query_columns):
+        
         pass
 
     """
