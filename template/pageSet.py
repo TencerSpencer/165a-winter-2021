@@ -1,6 +1,5 @@
-from template.page import Page
-from template.config import *
 import time
+from template.page import Page
 
 
 class PageSet:
@@ -46,8 +45,6 @@ class PageSet:
 
     def update_record(self, rid, *columns):
         offset = self.rids[rid]
-        cur_schema = ""
         for i in range(len(columns)):
             if columns[i] is not None:
                 self.pages[i].update(columns[i], offset)
-
