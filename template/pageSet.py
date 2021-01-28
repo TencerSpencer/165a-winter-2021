@@ -24,14 +24,14 @@ class PageSet:
         for i in range(self.num_columns):
             self.pages[i].write(columns[i])
 
-        # add key-value pair to rids where key is the rid and the value is a tuple containing the
-        # base_page_set index and record offset
-        self.rids[rid] = (self.num_columns / RECORDS_PER_PAGE, self.num_records)
+        # add key-value pair to rids where key is the rid and the value is the record offset
+        self.rids[rid] = self.num_records
+        offset = self.rids[rid]
 
         # add appropriate schema encoding, indirection, and timestamp
-        self.schema_encodings[self.num_records] = '0' * self.num_columns
-        self.indirections[self.num_records] = None
-        self.timestamps[self.num_records] = time.strftime("%H:%M", time.localtime())
+        self.schema_encodings[offset] = '0' * self.num_columns
+        self.indirections[offset] = None
+        self.timestamps[offset] = time.strftime("%H:%M", time.localtime())
 
     def read_record(self, rid, query_columns):
         offset = self.rids[rid]
@@ -43,3 +43,11 @@ class PageSet:
             data.append(self.pages[i].read(offset))
 
         return data
+
+    def update_record(self, rid, *columns):
+        offset = self.rids[rid]
+        cur_schema = ""
+        for i in range(len(columns)):
+            if columns[i] is not None:
+                self.pages[i].update(columns[i], offset)
+
