@@ -28,6 +28,7 @@ class Page:
         # convert bytes from data to a 64 bit integer and return value
         return int.from_bytes(self.data[(offset * 8):(offset * 8) + 8], "little")
 
+    # If we are updating, we are adding a new record to a tail page
     def update(self, value, offset):
         value_in_bytes = []
         val = value

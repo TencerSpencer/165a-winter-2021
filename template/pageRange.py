@@ -30,12 +30,13 @@ class PageRange:
         return self.base_page_sets[page_set_index].read_record(rid, query_columns)
 
     def remove_record(self):
+        # set given RID to null
         pass
 
     def update_record(self):
         pass
 
-    def create_rid(self):
+    def create_rid(self): # When we merge, do we continue to keep our pages?
         return START_RID + self.num_records
 
     def get_next_free_base_page_set(self):

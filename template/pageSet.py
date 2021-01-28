@@ -28,16 +28,21 @@ class PageSet:
         offset = self.rids[rid]
 
         # add appropriate schema encoding, indirection, and timestamp
-        self.schema_encodings[offset] = '0' * self.num_columns
+        self.schema_encodings[offset] = 0
         self.indirections[offset] = None
-        self.timestamps[offset] = time.strftime("%H:%M", time.localtime())
+
+        # store timestamp in milliseconds as an integer
+        # https://www.tutorialspoint.com/How-to-get-current-time-in-milliseconds-in-Python#:~:text=You%20can%20get%20the%20current,1000%20and%20round%20it%20off.
+        # To convert from milliseconds to date/time, https://stackoverflow.com/questions/748491/how-do-i-create-a-datetime-in-python-from-milliseconds
+        self.timestamps[offset] = int(round(time.time() * 1000))
+
 
     def read_record(self, rid, query_columns):
         offset = self.rids[rid]
         data = []
         for i in range(len(query_columns)):
             if query_columns[i] == 0:
-                continue
+                data.append(None)
 
             data.append(self.pages[i].read(offset))
 
@@ -45,6 +50,33 @@ class PageSet:
 
     def update_record(self, rid, *columns):
         offset = self.rids[rid]
+        updated_schema = 0
         for i in range(len(columns)):
             if columns[i] is not None:
                 self.pages[i].update(columns[i], offset)
+                
+                # append a 1 in the location where the column has been updated
+                (1 << i) | updated_schema
+        self.schema_encodings[offset] = updated_schema
+
+
+        # Need a new RID for tail page
+        # Need indirection for base page i.e. we'll need to update the base page's RID each time
+        # If a previous tail page existed, its indirection must be updated as well
+        
+
+
+    # build an array of changed indices, useful for reads
+    def __read_schema_encoding(self, rid):
+        # using same lookup,
+        offset = self.rids[rid]
+        
+        current_encoding = self.schema_encodings[offset]
+        changed_index_arr = []
+        
+        # loop through schema and append to array if there is a 1
+        for i in range(self.num_columns):
+            if (current_encoding >> i) & 1: 
+                changed_index_arr.append(i)
+            
+        return changed_index_arr
