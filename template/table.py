@@ -1,6 +1,4 @@
-from template.page import *
 from template.index import Index
-from time import time
 
 INDIRECTION_COLUMN = 0
 RID_COLUMN = 1
@@ -15,16 +13,18 @@ class Record:
         self.key = key
         self.columns = columns
 
-class Table:
 
+class Table:
     """
     :param name: string         #Table name
     :param num_columns: int     #Number of Columns: all columns are integer
     :param key: int             #Index of table key in columns
     """
+
     def __init__(self, name, num_columns, key):
         self.name = name
         self.key = key
+        self.keys = {}  # key-value pairs { record key : (rid, page range index, base page set index) }
         self.num_columns = num_columns
         self.page_directory = {}
         self.index = Index(self)
@@ -32,4 +32,3 @@ class Table:
 
     def __merge(self):
         pass
- 
