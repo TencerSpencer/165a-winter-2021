@@ -17,7 +17,7 @@ class Page:
         value_in_bytes = []
         val = value
         for i in range(8):  # convert 64 bit value into byte sized chunks
-            value_in_bytes.append((val >> 8) & 0x11111111)
+            value_in_bytes.append((val >> 8*i) & 0b11111111)
 
         for i in range(8):  # add byte sized chunks to data
             self.data[(self.num_records * 8) + i] = value_in_bytes[i]
@@ -33,7 +33,7 @@ class Page:
         value_in_bytes = []
         val = value
         for i in range(8):  # convert 64 bit value into byte sized chunks
-            value_in_bytes.append((val >> 8) & 0x11111111)
+            value_in_bytes.append((val >> 8) & 0b11111111)
 
         for i in range(8):  # add byte sized chunks to data
             self.data[(offset * 8) + i] = value_in_bytes[i]
