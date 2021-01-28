@@ -20,7 +20,7 @@ class PageRange:
 
     def add_record(self, *columns):
         # add record to appropriate page set
-        self.base_page_sets[self.num_records / RECORDS_PER_PAGE].add_record(START_RID + self.num_records, columns)
+        self.base_page_sets[self.num_records / RECORDS_PER_PAGE].write_record(START_RID + self.num_records, columns)
         self.num_records += 1
 
     def get_record(self, rid, page_set_index, query_columns):

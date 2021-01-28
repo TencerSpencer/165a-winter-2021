@@ -19,7 +19,7 @@ class PageSet:
         for i in range(self.num_columns):
             self.pages.append(Page())
 
-    def add_record(self, rid, *columns):
+    def write_record(self, rid, *columns):
         # write data
         for i in range(self.num_columns):
             self.pages[i].write(columns[i])
