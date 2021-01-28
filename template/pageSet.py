@@ -36,8 +36,6 @@ class PageSet:
         # To convert from milliseconds to date/time, https://stackoverflow.com/questions/748491/how-do-i-create-a-datetime-in-python-from-milliseconds
         self.timestamps[offset] = int(round(time.time() * 1000))
 
-        self.num_records += 1
-
     def write_tail_record(self, rid, indirection, *columns):
         # write data
         for i in range(self.num_columns):
@@ -63,7 +61,7 @@ class PageSet:
         offset = self.rids[rid]
         if columns_to_read == None: # read all columns
             return self.pages[index].read(offset)
-        else :
+        else:
             return None
         
 
@@ -73,7 +71,7 @@ class PageSet:
         updated_schema = 0
         for i in range(len(columns)):
             if columns[i] is not None: # We are appending, not overwriting, yet we need to fix our pointers afterwards and move things upstream
-                self.pages[i].update(columns[i], offset)
+             #   self.pages[i].update(columns[i], offset)
 
                 # append a 1 in the location where the column has been updated
                 updated_schema = (1 << i) | updated_schema

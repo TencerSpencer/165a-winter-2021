@@ -75,7 +75,19 @@ class PageRange:
         # set given RID to null in directory
         pass
 
-    def update_record(self):
+    def update_record(self, rid, page_set_index, *columns):
+        
+        # look for next available tail page, create one if it does not exist
+        # get the next available RID and map it to a page in the given tail page
+        # CUMULATIVE APPROACH: look at columns info and update it with the latest tail page's info
+        # generate a new schema based on this UPDATED column and then have all this data get written to the tail page
+        # set tail's schema and base's schema to the newly generated schema
+        # if a previous tail existed, set that tail's indirection to the current tail
+        # set the base's indirection to the new tail and the new tail's indirection to the base tail
+
+        # I think that covers everything
+
+
         pass
 
     def create_rid(self):  # When we merge, do we continue to keep our pages?
