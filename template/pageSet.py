@@ -36,6 +36,8 @@ class PageSet:
         # To convert from milliseconds to date/time, https://stackoverflow.com/questions/748491/how-do-i-create-a-datetime-in-python-from-milliseconds
         self.timestamps[offset] = int(round(time.time() * 1000))
 
+        self.num_records += 1
+
     def write_tail_record(self, rid, indirection, *columns):
         # write data
         for i in range(self.num_columns):
@@ -58,6 +60,8 @@ class PageSet:
         # https://www.tutorialspoint.com/How-to-get-current-time-in-milliseconds-in-Python#:~:text=You%20can%20get%20the%20current,1000%20and%20round%20it%20off.
         # To convert from milliseconds to date/time, https://stackoverflow.com/questions/748491/how-do-i-create-a-datetime-in-python-from-milliseconds
         self.timestamps[offset] = int(round(time.time() * 1000))
+
+        self.num_records += 1
 
     def read_record(self, rid, query_columns):
         offset = self.rids[rid]
