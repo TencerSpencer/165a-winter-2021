@@ -159,6 +159,9 @@ class PageRange:
         self.base_timestamps[offset] = int(round(time.time() * 1000))
 
     def __write_tail_record(self, rid, schema, indirection, *columns):
+        if self.__tail_page_sets_full():
+            self.tail_page_sets.append(PageSet(self.num_columns))
+
         tail_page_set_index = self.num_tail_records / RECORDS_PER_PAGE
         tail_page_set = self.tail_page_sets[tail_page_set_index]
 
@@ -215,3 +218,10 @@ class PageRange:
             return None
         else:
             return self.base_indirections[base_record_offset]
+
+    def __tail_page_sets_full(self):
+        if len(self.tail_page_sets) is 0:
+            return True
+
+        return not self.tail_page_sets[-1].has_capacity()
+

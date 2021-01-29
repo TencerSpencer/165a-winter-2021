@@ -8,10 +8,7 @@ class Page:
         self.data = bytearray(PAGE_SIZE)
 
     def has_capacity(self):
-        if self.num_records < RECORDS_PER_PAGE:
-            return True
-
-        return False
+        return self.num_records < RECORDS_PER_PAGE
 
     def write(self, value):
         value_in_bytes = []
