@@ -220,3 +220,5 @@ class PageRange:
 
         return not self.tail_page_sets[-1].has_capacity()
 
+    def __is_full(self):
+        return self.num_base_records < PAGE_SETS * RECORDS_PER_PAGE
