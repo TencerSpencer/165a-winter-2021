@@ -40,7 +40,7 @@ class PageRange:
 
         # start at the base page, get its schema too
         base_page_set = self.base_page_sets[base_page_set_index]
-        tail_record_rid = base_page_set.get_indirection(base_record_rid)
+        tail_record_rid = base_page_set.get_indirection(base_record_rid)[1]
 
         # get only the base page's info
         if tail_record_rid is None:
@@ -56,7 +56,7 @@ class PageRange:
             base_page_schema = base_page_set.schema_encoding[base_record_offset]
 
             # filler function that must obtain a tail page handler from a given RID
-            tail_record_rid = self.base_indirections[base_record_offset]
+            tail_record_rid = self.base_indirections[base_record_offset][1]
 
             # pointer access isn't as expensive, utilize this to alternate page reads
             for i in range(self.num_columns):
@@ -90,7 +90,7 @@ class PageRange:
         # I think that covers everything
 
         # get previous tail rid
-        prev_tail_rid = self.__get_indirection(base_rid)
+        prev_tail_rid = self.__get_indirection(base_rid)[1]
 
         # get new schema for current update and base record
         base_record_offset = self.base_rids[base_rid][1]
@@ -108,7 +108,7 @@ class PageRange:
         # change base and tail record indirections accordingly
         if prev_tail_rid is None:
             prev_tail_rid = base_rid
-        self.base_indirections[base_record_offset] = tail_rid
+        self.base_indirections[base_record_offset] = (1, tail_rid)
 
         # modify the columns to be written by merging the previous tail record and new columns to write
         new_columns = columns
@@ -116,7 +116,7 @@ class PageRange:
             new_columns = self.__get_new_columns_for_new_tail(prev_tail_rid, columns)
 
         # write new tail with new schema and previous tails rid
-        self.__write_tail_record(tail_rid, new_schema, prev_tail_rid, new_columns)
+        self.__write_tail_record(tail_rid, new_schema, (0, prev_tail_rid) if prev_tail_rid is None else (1, prev_tail_rid), new_columns)
 
     def __get_new_columns_for_new_tail(self, prev_tail_rid, *columns):
         data = list(columns)
@@ -151,7 +151,7 @@ class PageRange:
 
         # add appropriate schema encoding, indirection, and timestamp
         self.base_schema_encodings[offset] = 0
-        self.base_indirections[offset] = None
+        self.base_indirections[offset] = (None, None)
 
         # store timestamp in milliseconds as an integer
         # https://www.tutorialspoint.com/How-to-get-current-time-in-milliseconds-in-Python#:~:text=You%20can%20get%20the%20current,1000%20and%20round%20it%20off.
@@ -212,12 +212,7 @@ class PageRange:
     # return indirection RID of a page that has been updated
     def __get_indirection(self, rid):
         base_record_offset = self.base_rids[rid][1]
-        current_schema = self.base_schema_encodings[base_record_offset]
-        # check current schema
-        if current_schema == 0:
-            return None
-        else:
-            return self.base_indirections[base_record_offset]
+        return self.base_indirections[base_record_offset]
 
     def __tail_page_sets_full(self):
         if len(self.tail_page_sets) is 0:
