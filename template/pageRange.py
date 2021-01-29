@@ -30,6 +30,9 @@ class PageRange:
         self.tail_page_sets.append(PageSet(self.num_columns))
 
     def add_record(self, rid, *columns):
+        if self.__is_full():
+            return
+
         # add record to appropriate page set
         self.__write_base_record(rid, columns)
         self.num_base_records += 1
