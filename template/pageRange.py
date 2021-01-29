@@ -15,10 +15,10 @@ class PageRange:
         self.base_rids = {}  # key-value pairs: { rid : (page set index, offset) }
         self.tail_rids = {}  # key-value pairs: { rid : (page set index, offset) }
         self.base_schema_encodings = []
-        self.base_indirections = []
+        self.base_indirections = []  # contains (0/1 based on if base/tail, rid)
         self.base_timestamps = []
         self.tail_schema_encodings = []
-        self.tail_indirections = []
+        self.tail_indirections = []  # contains (0/1 based on if base/tail, rid)
         self.tail_timestamps = []
         self.__init_base_page_sets()
 
