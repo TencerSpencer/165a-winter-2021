@@ -52,9 +52,11 @@ class Table:
         # insert dictionary entry
         self.__add_dict_record(key_col, current_rid, next_free_page_range_index, next_free_base_bage_set_index)
 
+        col_list.remove(self.key) # remove key entry
+
         # continue with inserting the record here
         curr_page_range = self.page_range_array(next_free_page_range_index)
-        curr_page_range.write_base_record(current_rid, col_list[1:]) # remove the key from the columns array provided
+        curr_page_range.write_base_record(current_rid, col_list)
 
 
     def __add_dict_record(self, key, new_rid, page_range_index, base_page_set_index):
