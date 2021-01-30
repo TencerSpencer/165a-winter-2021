@@ -62,10 +62,7 @@ class PageRangeTests(unittest.TestCase):
         for i in range(8192):
             read_data.append(pr.get_record(i, [1, 1, 1, 1, 1]))
 
-        for i in range(8192):
-            if columns[i] != read_data[i]:
-                print(columns[i], read_data[i])
-                self.assertTrue(False)
+        self.assertTrue(columns == read_data)
 
 
 if __name__ == '__main__':
