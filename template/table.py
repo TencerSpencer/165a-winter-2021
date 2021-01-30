@@ -64,11 +64,16 @@ class Table:
         keys[key] = (new_rid, page_range_index, base_page_set_index)
 
 
+    # todo, handler from query to table for update
     def update_record(self):
         pass
 
     # todo, handler from query to table for select
     def select_record(self):
+        pass 
+
+    # todo, handler from query to table for remove
+    def remove_record(self):
         pass 
 
 
@@ -103,7 +108,7 @@ class Table:
         return len(self.page_range_array-1)
 
 
-    def __get_page_range_from_key(self, key):
+    def __get_rid_from_key(self, key):
         return keys[key][0]  
 
     def __get_page_range_from_key(self, key):
