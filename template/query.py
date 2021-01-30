@@ -21,6 +21,7 @@ class Query:
     # Return False if record doesn't exist or is locked due to 2PL
     """
     def delete(self, key):
+        # for now, all this has to do is invalidate a key
         pass
 
     """
@@ -29,7 +30,11 @@ class Query:
     # Returns False if insert fails for whatever reason
     """
     def insert(self, *columns):
-        schema_encoding = '0' * self.table.num_columns
+
+        # Can call insert record from table.py
+
+        # schema_encoding = 0 * self.table.num_columns
+        schema_encoding = 0
         pass
 
     """
@@ -41,6 +46,7 @@ class Query:
     # Assume that select will never be called on a key that doesn't exist
     """
     def select(self, key, column, query_columns):
+        
         pass
 
     """
