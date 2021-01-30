@@ -64,6 +64,15 @@ class PageRangeTests(unittest.TestCase):
 
         self.assertTrue(columns == read_data)
 
+    def test_update_1_record(self):
+        pass
+
+    def test_update_10_records(self):
+        pass
+
+    def test_update_8192_records(self):
+        pass
+
 
 if __name__ == '__main__':
     unittest.main()
