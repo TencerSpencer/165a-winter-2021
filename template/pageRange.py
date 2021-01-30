@@ -22,6 +22,7 @@ class PageRange:
         self.tail_timestamps = []
         self.__init_base_page_sets()
 
+    # Are all page/tail pages being created upon a page range's creation? If so, I do not think this is the right setup. They are supposed to be made dynamically.
     def __init_base_page_sets(self):
         for i in range(PAGE_SETS):
             self.base_page_sets.append(PageSet(self.num_columns))
@@ -134,13 +135,13 @@ class PageRange:
 
         return data
 
-    def __get_next_free_base_page_set(self):
+    def get_next_free_base_page_set(self):
         return self.num_base_records / RECORDS_PER_PAGE
 
     def has_space(self):
         return self.num_base_records < PAGE_SETS * RECORDS_PER_PAGE
 
-    def __write_base_record(self, rid, *columns):
+    def write_base_record(self, rid, *columns):
         base_page_set_index = self.num_base_records / RECORDS_PER_PAGE
         base_page_set = self.base_page_sets[base_page_set_index]
 
@@ -223,5 +224,8 @@ class PageRange:
 
         return not self.tail_page_sets[-1].has_capacity()
 
-    def __is_full(self):
+    # Keep this function public so that table can check if this page range is full or not
+    def is_full(self):
         return not self.num_base_records < PAGE_SETS * RECORDS_PER_PAGE
+
+    
