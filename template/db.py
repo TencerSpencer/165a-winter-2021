@@ -3,7 +3,7 @@ from template.table import Table
 class Database():
 
     def __init__(self):
-        self.tables = []
+        self.tables = {}
         pass
 
     def open(self, path):
@@ -20,16 +20,22 @@ class Database():
     """
     def create_table(self, name, num_columns, key):
         table = Table(name, num_columns, key)
+        self.tables[name] = table
         return table
 
     """
     # Deletes the specified table
     """
     def drop_table(self, name):
-        pass
+        if name in self.tables.keys():
+            self.tables.pop(name)
+            print("Table has been removed")
+        else:
+            print("Table is not found")
+        
 
     """
     # Returns table with the passed name
     """
-    def get_table(self, name):
-        pass
+    def get_table(self, name): 
+        return self.tables.get(name)
