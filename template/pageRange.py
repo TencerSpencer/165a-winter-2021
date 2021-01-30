@@ -14,15 +14,16 @@ class PageRange:
         self.next_rid = 0
         self.base_rids = {}  # key-value pairs: { rid : (page set index, offset) }
         self.tail_rids = {}  # key-value pairs: { rid : (page set index, offset) }
-        self.base_schema_encodings = []
-        self.base_indirections = []  # contains (0/1 based on if base/tail, rid)
-        self.base_timestamps = []
-        self.tail_schema_encodings = []
-        self.tail_indirections = []  # contains (0/1 based on if base/tail, rid)
-        self.tail_timestamps = []
+        self.base_schema_encodings = {}
+        self.base_indirections = {}  # contains (0/1 based on if base/tail, rid)
+        self.base_timestamps = {}
+        self.tail_schema_encodings = {}
+        self.tail_indirections = {}  # contains (0/1 based on if base/tail, rid)
+        self.tail_timestamps = {}
         self.__init_base_page_sets()
 
-    # Are all page/tail pages being created upon a page range's creation? If so, I do not think this is the right setup. They are supposed to be made dynamically.
+    # Are all page/tail pages being created upon a page range's creation? If so, I do not think this is the right
+    # setup. They are supposed to be made dynamically.
     def __init_base_page_sets(self):
         for i in range(PAGE_SETS):
             self.base_page_sets.append(PageSet(self.num_columns))
@@ -30,7 +31,7 @@ class PageRange:
     def __add_tail_page_set(self):
         self.tail_page_sets.append(PageSet(self.num_columns))
 
-    def add_record(self, rid, *columns):
+    def add_record(self, rid, columns):
         if self.__is_full():
             return
 
@@ -44,7 +45,7 @@ class PageRange:
 
         # start at the base page, get its schema too
         base_page_set = self.base_page_sets[base_page_set_index]
-        tail_record_rid = base_page_set.get_indirection(base_record_rid)[1]
+        tail_record_rid = self.__get_indirection(base_record_rid)[1]
 
         # get only the base page's info
         if tail_record_rid is None:
@@ -74,16 +75,18 @@ class PageRange:
 
     def __get_only_base_record(self, rid, page_set_index, query_columns):
         read_data = []
-        base_page_to_read = self.base_page_sets[page_set_index]
         for i in range(self.num_columns):
-            read_data.append(base_page_to_read.read_record(rid, query_columns, i))
+            if query_columns[i] is None:
+                read_data.append(None)
+            else:
+                read_data.append(self.__read_record(0, rid, page_set_index, i))
 
         return read_data
 
     def remove_record(self, rid):
         self.base_rids.pop(rid)
 
-    def update_record(self, base_rid, tail_rid, *columns):
+    def update_record(self, base_rid, tail_rid, columns):
         # look for next available tail page set, create one if it does not exist
         # get the next available RID and map it to a page in the given tail page
         # CUMULATIVE APPROACH: look at columns info and update it with the latest tail page's info
@@ -122,7 +125,7 @@ class PageRange:
         # write new tail with new schema and previous tails rid
         self.__write_tail_record(tail_rid, new_schema, (0, prev_tail_rid) if prev_tail_rid is None else (1, prev_tail_rid), new_columns)
 
-    def __get_new_columns_for_new_tail(self, prev_tail_rid, *columns):
+    def __get_new_columns_for_new_tail(self, prev_tail_rid, columns):
         data = list(columns)
         tail_page_set_index, offset = self.tail_page_sets[prev_tail_rid][0:2]
         prev_tail_schema = self.tail_schema_encodings[offset]
@@ -136,13 +139,13 @@ class PageRange:
         return data
 
     def get_next_free_base_page_set(self):
-        return self.num_base_records / RECORDS_PER_PAGE
+        return self.num_base_records // RECORDS_PER_PAGE
 
     def has_space(self):
         return self.num_base_records < PAGE_SETS * RECORDS_PER_PAGE
 
-    def write_base_record(self, rid, *columns):
-        base_page_set_index = self.num_base_records / RECORDS_PER_PAGE
+    def __write_base_record(self, rid, columns):
+        base_page_set_index = int(self.num_base_records // RECORDS_PER_PAGE)
         base_page_set = self.base_page_sets[base_page_set_index]
 
         # write data
@@ -150,8 +153,8 @@ class PageRange:
             base_page_set.pages[i].write(columns[i])
 
         # add key-value pair to base_rids where key is the rid and the value is the record offset
-        self.base_rids[rid] = (0, base_page_set_index, self.num_base_records)
-        offset = self.base_rids[rid]
+        self.base_rids[rid] = (base_page_set_index, self.num_base_records)
+        offset = self.base_rids[rid][1]
 
         # add appropriate schema encoding, indirection, and timestamp
         self.base_schema_encodings[offset] = 0
@@ -162,11 +165,11 @@ class PageRange:
         # To convert from milliseconds to date/time, https://stackoverflow.com/questions/748491/how-do-i-create-a-datetime-in-python-from-milliseconds
         self.base_timestamps[offset] = int(round(time.time() * 1000))
 
-    def __write_tail_record(self, rid, schema, indirection, *columns):
+    def __write_tail_record(self, rid, schema, indirection, columns):
         if self.__tail_page_sets_full():
             self.tail_page_sets.append(PageSet(self.num_columns))
 
-        tail_page_set_index = self.num_tail_records / RECORDS_PER_PAGE
+        tail_page_set_index = int(self.num_tail_records // RECORDS_PER_PAGE)
         tail_page_set = self.tail_page_sets[tail_page_set_index]
 
         # write data
@@ -174,7 +177,7 @@ class PageRange:
             tail_page_set.pages[i].write(columns[i])
 
         # add key-value pair to base_rids where key is the rid and the value is the record offset
-        self.tail_rids[rid] = (1, tail_page_set_index, self.num_tail_records)
+        self.tail_rids[rid] = (tail_page_set_index, self.num_tail_records)
         tail_record_offset = self.tail_rids[rid][1]
 
         self.tail_schema_encodings[tail_record_offset] = schema
@@ -184,16 +187,16 @@ class PageRange:
         self.num_tail_records += 1
 
     def __read_record(self, page_type, rid, page_set_index, column_to_read):
-        if page_type is 0:
-            offset = self.base_rids[rid]
+        if page_type == 0:
+            offset = int(self.base_rids[rid][1] % RECORDS_PER_PAGE)  # get offset of the individual page
             if column_to_read is not None:  # read all columns
-                return self.base_page_sets[page_set_index][column_to_read].read(offset)
+                return self.base_page_sets[page_set_index].pages[column_to_read].read(offset)
             else:
                 return None
         else:
-            offset = self.tail_rids[rid]
+            offset = int(self.tail_rids[rid][1] % RECORDS_PER_PAGE)  # get offset of the individual page
             if column_to_read is not None:  # read all columns
-                return self.tail_page_sets[page_set_index][column_to_read].read(offset)
+                return self.tail_page_sets[page_set_index].pages[column_to_read].read(offset)
             else:
                 return None
 
@@ -201,7 +204,7 @@ class PageRange:
     # build an array of changed indices, useful for reads
     def __read_schema_encoding(self, rid):
         # using same lookup,
-        offset = self.base_rids[rid]
+        offset = self.base_rids[rid][1]
 
         current_encoding = self.base_schema_encodings[offset]
         changed_index_arr = []
@@ -219,13 +222,12 @@ class PageRange:
         return self.base_indirections[base_record_offset]
 
     def __tail_page_sets_full(self):
-        if len(self.tail_page_sets) is 0:
+        if len(self.tail_page_sets) == 0:
             return True
 
         return not self.tail_page_sets[-1].has_capacity()
 
     # Keep this function public so that table can check if this page range is full or not
-    def is_full(self):
+    def __is_full(self):
         return not self.num_base_records < PAGE_SETS * RECORDS_PER_PAGE
 
-    
