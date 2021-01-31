@@ -47,8 +47,9 @@ class Query:
     # Returns False if record locked by TPL
     # Assume that select will never be called on a key that doesn't exist
     """
+
     def select(self, key, column, query_columns):
-        return list(self.table.select_record(key, query_columns))
+        return self.table.select_record(key, query_columns)
 
     """
     # Update a record with specified key and columns
@@ -56,7 +57,7 @@ class Query:
     # Returns False if no records exist with given key or if the target record cannot be accessed due to 2PL locking
     """
     def update(self, key, *columns):
-        pass
+        self.table.update_record(key, *columns)
 
     """
     :param start_range: int         # Start of the key range to aggregate 

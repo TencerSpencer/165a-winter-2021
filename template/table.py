@@ -63,15 +63,24 @@ class Table:
         self.keys[key] = (new_rid, page_range_index, base_page_set_index)
 
     # todo, handler from query to table for update
-    def update_record(self):
-        pass
+    def update_record(self, key, *columns):
+        # key-value pairs { record key : (rid, page range index, base page set index) }
+        location_data = self.keys.get(key)
+        rid = location_data[0]
+        page_range_index = location_data[1]
+        cur_page_range = self.page_range_array[page_range_index]
+
+        base_rid = self.__get_rid_from_key(key)
+        tail_rid = cur_page_range.get_tail_rid(base_rid)
+        print(base_rid)
+        cur_page_range.update_record(base_rid, tail_rid, columns)
 
     # todo, handler from query to table for select
     def select_record(self, key, query_columns):
         # key-value pairs { record key : (rid, page range index, base page set index) }
         location_data = self.keys.get(key)
-        # if (location_data == None): # Not necessary since we assume it will only
-        # be called for valid keys as per the template notes
+        if (location_data == None):
+            return False;
         rid = location_data[0]
         page_range_index = location_data[1]
         cur_page_range = self.page_range_array[page_range_index]

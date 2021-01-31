@@ -90,6 +90,9 @@ class PageRange:
     def remove_record(self, rid):
         self.base_rids.pop(rid)
 
+    def get_tail_rid(self, base_record_rid):
+        tail_record_rid = self.__get_indirection(base_record_rid)[1]
+
     def update_record(self, base_rid, tail_rid, columns):
         # look for next available tail page set, create one if it does not exist
         # get the next available RID and map it to a page in the given tail page
