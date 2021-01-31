@@ -64,18 +64,48 @@ class PageRangeTests(unittest.TestCase):
 
         self.assertTrue(columns == read_data)
 
-    def test_update_1_record(self):
+    def test_update_once_1_record(self):
         pr = PageRange(5)
         pr.add_record(0, [20, 21, 22, 23, 24])
         pr.update_record(0, 0, [0, 1, 2, 3, 4])
         data = pr.get_record(0, [1, 1, 1, 1, 1])
         self.assertTrue(data == [0, 1, 2, 3, 4])
 
-    def test_update_10_records(self):
-        pass
+    def test_update_once_10_records(self):
+        pr = PageRange(5)
+        columns = []
+        for i in range(10):
+            columns.append([20 + i, 21 + i, 22 + i, 23 + i, 24 + i])
+            pr.add_record(i, columns[i])
 
-    def test_update_8192_records(self):
-        pass
+        updated_columns = []
+        for i in range(10):
+            updated_columns.append([i, i * 2, i * 3, i * 4, i * 5])
+            pr.update_record(i, i, updated_columns[i])
+
+        data = []
+        for i in range(10):
+            data.append(pr.get_record(i, [1, 1, 1, 1, 1]))
+
+        self.assertTrue(data == updated_columns)
+
+    def test_update_once_8192_records(self):
+        pr = PageRange(5)
+        columns = []
+        for i in range(8192):
+            columns.append([20 + i, 21 + i, 22 + i, 23 + i, 24 + i])
+            pr.add_record(i, columns[i])
+
+        updated_columns = []
+        for i in range(8192):
+            updated_columns.append([i, i * 2, i * 3, i * 4, i * 5])
+            pr.update_record(i, i, updated_columns[i])
+
+        data = []
+        for i in range(8192):
+            data.append(pr.get_record(i, [1, 1, 1, 1, 1]))
+
+        self.assertTrue(data == updated_columns)
 
 
 if __name__ == '__main__':
