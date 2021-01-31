@@ -57,8 +57,8 @@ class PageRange:
             read_data = []
 
             # obtain schema
-            base_record_offset = base_page_set.rids[base_record_rid][1]
-            base_page_schema = base_page_set.schema_encoding[base_record_offset]
+            base_record_offset = self.base_rids[base_record_rid][1]
+            base_page_schema = self.base_schema_encodings[base_record_offset]
 
             # filler function that must obtain a tail page handler from a given RID
             tail_record_rid = self.base_indirections[base_record_offset][1]
@@ -66,10 +66,10 @@ class PageRange:
             # pointer access isn't as expensive, utilize this to alternate page reads
             for i in range(self.num_columns):
                 if query_columns[i] is not None:
-                    if (base_page_schema >> i) == 1:
-                        read_data.append(tail_page_set[i].__read_record(1, tail_record_rid, tail_page_set_index, i))
+                    if (base_page_schema >> i) & 1:
+                        read_data.append(self.__read_record(1, tail_record_rid, tail_page_set_index, i))
                     else:
-                        read_data.append(base_page_set[i].__read_record(0, base_record_rid, base_page_set_index, i))
+                        read_data.append(self.__read_record(0, base_record_rid, base_page_set_index, i))
 
             return read_data
 
@@ -123,7 +123,7 @@ class PageRange:
             new_columns = self.__get_new_columns_for_new_tail(prev_tail_rid, columns)
 
         # write new tail with new schema and previous tails rid
-        self.__write_tail_record(tail_rid, new_schema, (0, prev_tail_rid) if prev_tail_rid is None else (1, prev_tail_rid), new_columns)
+        self.__write_tail_record(tail_rid, new_schema, (0, prev_tail_rid) if prev_tail_rid is base_rid else (1, prev_tail_rid), new_columns)
 
     def __get_new_columns_for_new_tail(self, prev_tail_rid, columns):
         data = list(columns)
