@@ -34,8 +34,6 @@ class Table:
         # adding an array of page ranges here
         self.page_range_array = []
 
-        pass
-
     def __merge(self):
         pass
 
@@ -52,11 +50,13 @@ class Table:
         # insert dictionary entry
         self.__add_dict_record(key_col, current_rid, next_free_page_range_index, next_free_base_page_set_index)
 
-        col_list.remove(self.key)  # remove key entry
+        col_list.pop(self.key)  # remove key entry; changed from remove to pop as
+        # pop removes at the provided INDEX while remove removes the provided
+        # VALUE
 
         # continue with inserting the record here
         curr_page_range = self.page_range_array[next_free_page_range_index]
-        curr_page_range.__write_base_record(current_rid, col_list)
+        curr_page_range._write_base_record(current_rid, col_list)
 
     def __add_dict_record(self, key, new_rid, page_range_index, base_page_set_index):
         # need to find page range index, so next free page range, and next free base page set index
@@ -67,11 +67,19 @@ class Table:
         pass
 
     # todo, handler from query to table for select
-    def select_record(self):
-        pass
+    def select_record(self, key, query_columns):
+        # key-value pairs { record key : (rid, page range index, base page set index) }
+        location_data = self.keys.get(key)
+        # if (location_data == None): # Not necessary since we assume it will only
+        # be called for valid keys as per the template notes
+        rid = location_data[0]
+        page_range_index = location_data[1]
+        cur_page_range = self.page_range_array[page_range_index]
+        return cur_page_range.get_record(rid, query_columns)
 
     # todo, handler from query to table for remove
-    def remove_record(self):
+    def remove_record(self, key):
+        self.keys.pop(key)
         pass
 
         # page set function will be within a page range, not here
@@ -93,7 +101,7 @@ class Table:
 
         # note, I assume that base records will be removed at some point, so I choose to loop through each
         for i in range(len(self.page_range_array)):
-            if not self.page_range_array[i].__is_full():
+            if not self.page_range_array[i]._is_full():
                 return i
 
         # if we reeached here, then all our current page ranges are full. As such, build a new one

@@ -22,6 +22,7 @@ class Query:
     """
     def delete(self, key):
         # for now, all this has to do is invalidate a key
+        self.table.remove_record(key)
         pass
 
     """
@@ -32,10 +33,11 @@ class Query:
     def insert(self, *columns):
 
         # Can call insert record from table.py
+        self.table.insert_record(*columns)
 
         # schema_encoding = 0 * self.table.num_columns
-        schema_encoding = 0
-        pass
+        # schema_encoding = 0
+        return True;
 
     """
     # Read a record with specified key
@@ -46,8 +48,7 @@ class Query:
     # Assume that select will never be called on a key that doesn't exist
     """
     def select(self, key, column, query_columns):
-        
-        pass
+        return list(self.table.select_record(key, query_columns))
 
     """
     # Update a record with specified key and columns
