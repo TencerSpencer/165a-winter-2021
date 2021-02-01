@@ -38,6 +38,8 @@ class PageRange:
         # add record to appropriate page set
         self.__write_base_record(rid, columns)
         self.num_base_records += 1
+        # TODO: Check if this should be used instead of directly _write in
+        # table.insert_record ?
 
     # setup is simplistic due to cumulative pages
     def get_record(self, base_record_rid, query_columns):
@@ -65,7 +67,7 @@ class PageRange:
 
             # pointer access isn't as expensive, utilize this to alternate page reads
             for i in range(self.num_columns):
-                if query_columns[i] is not None:
+                if query_columns[i] is not None and query_columns[i] is not 0:
                     if (base_page_schema >> i) == 1:
                         read_data.append(tail_page_set[i].__read_record(1, tail_record_rid, tail_page_set_index, i))
                     else:
@@ -76,15 +78,16 @@ class PageRange:
     def __get_only_base_record(self, rid, page_set_index, query_columns):
         read_data = []
         for i in range(self.num_columns):
-            if query_columns[i] is None:
-                read_data.append(None)
-            else:
+            if query_columns[i] is not None and query_columns[i] is not 0:
                 read_data.append(self.__read_record(0, rid, page_set_index, i))
 
         return read_data
 
     def remove_record(self, rid):
         self.base_rids.pop(rid)
+
+    def get_tail_rid(self, base_record_rid):
+        tail_record_rid = self.__get_indirection(base_record_rid)[1]
 
     def update_record(self, base_rid, tail_rid, columns):
         # look for next available tail page set, create one if it does not exist
@@ -144,7 +147,7 @@ class PageRange:
     def has_space(self):
         return self.num_base_records < PAGE_SETS * RECORDS_PER_PAGE
 
-    def __write_base_record(self, rid, columns):
+    def _write_base_record(self, rid, columns):
         base_page_set_index = int(self.num_base_records // RECORDS_PER_PAGE)
         base_page_set = self.base_page_sets[base_page_set_index]
 
@@ -164,6 +167,8 @@ class PageRange:
         # https://www.tutorialspoint.com/How-to-get-current-time-in-milliseconds-in-Python#:~:text=You%20can%20get%20the%20current,1000%20and%20round%20it%20off.
         # To convert from milliseconds to date/time, https://stackoverflow.com/questions/748491/how-do-i-create-a-datetime-in-python-from-milliseconds
         self.base_timestamps[offset] = int(round(time.time() * 1000))
+        # TODO: Check if this is duplicate from add_record
+        self.num_base_records += 1
 
     def __write_tail_record(self, rid, schema, indirection, columns):
         if self.__tail_page_sets_full():
@@ -228,6 +233,6 @@ class PageRange:
         return not self.tail_page_sets[-1].has_capacity()
 
     # Keep this function public so that table can check if this page range is full or not
-    def __is_full(self):
+    def _is_full(self):
         return not self.num_base_records < PAGE_SETS * RECORDS_PER_PAGE
 
