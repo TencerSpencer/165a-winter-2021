@@ -44,7 +44,6 @@ class PageRange:
         base_page_set_index = self.base_rids[base_record_rid][0]
 
         # start at the base page, get its schema too
-        base_page_set = self.base_page_sets[base_page_set_index]
         tail_record_rid = self.__get_indirection(base_record_rid)[1]
 
         # get only the base page's info
@@ -52,7 +51,6 @@ class PageRange:
             return self.__get_only_base_record(base_record_rid, base_page_set_index, query_columns)
         else:
             tail_page_set_index = self.tail_rids[tail_record_rid][0]
-            tail_page_set = self.tail_page_sets[tail_page_set_index]
 
             read_data = []
 
@@ -66,7 +64,7 @@ class PageRange:
             # pointer access isn't as expensive, utilize this to alternate page reads
             for i in range(self.num_columns):
                 if query_columns[i] is not None:
-                    if (base_page_schema >> i) & 1:
+                    if (base_page_schema >> self.num_columns - 1 - i) & 1:
                         read_data.append(self.__read_record(1, tail_record_rid, tail_page_set_index, i))
                     else:
                         read_data.append(self.__read_record(0, base_record_rid, base_page_set_index, i))
@@ -97,7 +95,8 @@ class PageRange:
         # I think that covers everything
 
         # get previous tail rid
-        prev_tail_rid = self.__get_indirection(base_rid)[1]
+        prev_base_indirection = self.__get_indirection(base_rid)
+        prev_tail_rid = prev_base_indirection[1]
 
         # get new schema for current update and base record
         base_record_offset = self.base_rids[base_rid][1]
@@ -106,7 +105,7 @@ class PageRange:
             # We are appending, not overwriting, yet we need to fix our pointers afterwards and move things upstream
             if columns[i] is not None:
                 # append a 1 in the location where the column has been updated
-                update_schema = (1 << i) | update_schema
+                update_schema = (1 << self.num_columns - 1 - i) | update_schema
         new_schema = update_schema | self.base_schema_encodings[base_record_offset]
 
         # update schema for base record
@@ -119,22 +118,22 @@ class PageRange:
 
         # modify the columns to be written by merging the previous tail record and new columns to write
         new_columns = columns
-        if prev_tail_rid is not base_rid:
+        if prev_base_indirection != (None, None):
             new_columns = self.__get_new_columns_for_new_tail(prev_tail_rid, columns)
 
         # write new tail with new schema and previous tails rid
-        self.__write_tail_record(tail_rid, new_schema, (0, prev_tail_rid) if prev_tail_rid is base_rid else (1, prev_tail_rid), new_columns)
+        self.__write_tail_record(tail_rid, new_schema, (0, prev_tail_rid) if prev_tail_rid == (None, None) else (1, prev_tail_rid), new_columns)
 
     def __get_new_columns_for_new_tail(self, prev_tail_rid, columns):
         data = list(columns)
-        tail_page_set_index, offset = self.tail_page_sets[prev_tail_rid][0:2]
+        tail_page_set_index, offset = self.tail_rids[prev_tail_rid][0:2]
         prev_tail_schema = self.tail_schema_encodings[offset]
 
         # if a column in columns parameter is None, check if prev tail has a value for the column
         for i in range(self.num_columns):
             if data[i] is None:
-                if (prev_tail_schema >> i) & 1:
-                    data[i] = self.tail_page_sets[tail_page_set_index][i].read(offset)
+                if (prev_tail_schema >> self.num_columns - 1 - i) & 1:
+                    data[i] = self.tail_page_sets[tail_page_set_index].pages[i].read(offset)
 
         return data
 
@@ -174,7 +173,10 @@ class PageRange:
 
         # write data
         for i in range(self.num_columns):
-            tail_page_set.pages[i].write(columns[i])
+            if columns[i] is not None:
+                tail_page_set.pages[i].write(columns[i])
+            else:
+                tail_page_set.pages[i].write(0)  # make sure each tail page is synced with one another
 
         # add key-value pair to base_rids where key is the rid and the value is the record offset
         self.tail_rids[rid] = (tail_page_set_index, self.num_tail_records)
