@@ -38,15 +38,12 @@ class PageRange:
         # add record to appropriate page set
         self.__write_base_record(rid, columns)
         self.num_base_records += 1
-        # TODO: Check if this should be used instead of directly _write in
-        # table.insert_record ?
 
     # setup is simplistic due to cumulative pages
     def get_record(self, base_record_rid, query_columns):
         base_page_set_index = self.base_rids[base_record_rid][0]
 
         # start at the base page, get its schema too
-        base_page_set = self.base_page_sets[base_page_set_index]
         tail_record_rid = self.__get_indirection(base_record_rid)[1]
 
         # get only the base page's info
@@ -54,40 +51,38 @@ class PageRange:
             return self.__get_only_base_record(base_record_rid, base_page_set_index, query_columns)
         else:
             tail_page_set_index = self.tail_rids[tail_record_rid][0]
-            tail_page_set = self.tail_page_sets[tail_page_set_index]
 
             read_data = []
 
             # obtain schema
-            base_record_offset = base_page_set.rids[base_record_rid][1]
-            base_page_schema = base_page_set.schema_encoding[base_record_offset]
+            base_record_offset = self.base_rids[base_record_rid][1]
+            base_page_schema = self.base_schema_encodings[base_record_offset]
 
             # filler function that must obtain a tail page handler from a given RID
             tail_record_rid = self.base_indirections[base_record_offset][1]
 
             # pointer access isn't as expensive, utilize this to alternate page reads
             for i in range(self.num_columns):
-                if query_columns[i] is not None and query_columns[i] is not 0:
-                    if (base_page_schema >> i) == 1:
-                        read_data.append(tail_page_set[i].__read_record(1, tail_record_rid, tail_page_set_index, i))
+                if query_columns[i] is not None:
+                    if (base_page_schema >> self.num_columns - 1 - i) & 1:
+                        read_data.append(self.__read_record(1, tail_record_rid, tail_page_set_index, i))
                     else:
-                        read_data.append(base_page_set[i].__read_record(0, base_record_rid, base_page_set_index, i))
+                        read_data.append(self.__read_record(0, base_record_rid, base_page_set_index, i))
 
             return read_data
 
     def __get_only_base_record(self, rid, page_set_index, query_columns):
         read_data = []
         for i in range(self.num_columns):
-            if query_columns[i] is not None and query_columns[i] is not 0:
+            if query_columns[i] is None:
+                read_data.append(None)
+            else:
                 read_data.append(self.__read_record(0, rid, page_set_index, i))
 
         return read_data
 
     def remove_record(self, rid):
         self.base_rids.pop(rid)
-
-    def get_tail_rid(self, base_record_rid):
-        tail_record_rid = self.__get_indirection(base_record_rid)[1]
 
     def update_record(self, base_rid, tail_rid, columns):
         # look for next available tail page set, create one if it does not exist
@@ -100,7 +95,8 @@ class PageRange:
         # I think that covers everything
 
         # get previous tail rid
-        prev_tail_rid = self.__get_indirection(base_rid)[1]
+        prev_base_indirection = self.__get_indirection(base_rid)
+        prev_tail_rid = prev_base_indirection[1]
 
         # get new schema for current update and base record
         base_record_offset = self.base_rids[base_rid][1]
@@ -109,7 +105,7 @@ class PageRange:
             # We are appending, not overwriting, yet we need to fix our pointers afterwards and move things upstream
             if columns[i] is not None:
                 # append a 1 in the location where the column has been updated
-                update_schema = (1 << i) | update_schema
+                update_schema = (1 << self.num_columns - 1 - i) | update_schema
         new_schema = update_schema | self.base_schema_encodings[base_record_offset]
 
         # update schema for base record
@@ -122,22 +118,22 @@ class PageRange:
 
         # modify the columns to be written by merging the previous tail record and new columns to write
         new_columns = columns
-        if prev_tail_rid is not base_rid:
+        if prev_base_indirection != (None, None):
             new_columns = self.__get_new_columns_for_new_tail(prev_tail_rid, columns)
 
         # write new tail with new schema and previous tails rid
-        self.__write_tail_record(tail_rid, new_schema, (0, prev_tail_rid) if prev_tail_rid is None else (1, prev_tail_rid), new_columns)
+        self.__write_tail_record(tail_rid, new_schema, (0, prev_tail_rid) if prev_tail_rid == (None, None) else (1, prev_tail_rid), new_columns)
 
     def __get_new_columns_for_new_tail(self, prev_tail_rid, columns):
         data = list(columns)
-        tail_page_set_index, offset = self.tail_page_sets[prev_tail_rid][0:2]
+        tail_page_set_index, offset = self.tail_rids[prev_tail_rid][0:2]
         prev_tail_schema = self.tail_schema_encodings[offset]
 
         # if a column in columns parameter is None, check if prev tail has a value for the column
         for i in range(self.num_columns):
             if data[i] is None:
-                if (prev_tail_schema >> i) & 1:
-                    data[i] = self.tail_page_sets[tail_page_set_index][i].read(offset)
+                if (prev_tail_schema >> self.num_columns - 1 - i) & 1:
+                    data[i] = self.tail_page_sets[tail_page_set_index].pages[i].read(offset)
 
         return data
 
@@ -147,7 +143,7 @@ class PageRange:
     def has_space(self):
         return self.num_base_records < PAGE_SETS * RECORDS_PER_PAGE
 
-    def _write_base_record(self, rid, columns):
+    def __write_base_record(self, rid, columns):
         base_page_set_index = int(self.num_base_records // RECORDS_PER_PAGE)
         base_page_set = self.base_page_sets[base_page_set_index]
 
@@ -167,8 +163,6 @@ class PageRange:
         # https://www.tutorialspoint.com/How-to-get-current-time-in-milliseconds-in-Python#:~:text=You%20can%20get%20the%20current,1000%20and%20round%20it%20off.
         # To convert from milliseconds to date/time, https://stackoverflow.com/questions/748491/how-do-i-create-a-datetime-in-python-from-milliseconds
         self.base_timestamps[offset] = int(round(time.time() * 1000))
-        # TODO: Check if this is duplicate from add_record
-        self.num_base_records += 1
 
     def __write_tail_record(self, rid, schema, indirection, columns):
         if self.__tail_page_sets_full():
@@ -179,7 +173,10 @@ class PageRange:
 
         # write data
         for i in range(self.num_columns):
-            tail_page_set.pages[i].write(columns[i])
+            if columns[i] is not None:
+                tail_page_set.pages[i].write(columns[i])
+            else:
+                tail_page_set.pages[i].write(0)  # make sure each tail page is synced with one another
 
         # add key-value pair to base_rids where key is the rid and the value is the record offset
         self.tail_rids[rid] = (tail_page_set_index, self.num_tail_records)
@@ -233,6 +230,5 @@ class PageRange:
         return not self.tail_page_sets[-1].has_capacity()
 
     # Keep this function public so that table can check if this page range is full or not
-    def _is_full(self):
+    def __is_full(self):
         return not self.num_base_records < PAGE_SETS * RECORDS_PER_PAGE
-
