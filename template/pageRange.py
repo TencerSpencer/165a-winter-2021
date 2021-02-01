@@ -232,4 +232,3 @@ class PageRange:
     # Keep this function public so that table can check if this page range is full or not
     def __is_full(self):
         return not self.num_base_records < PAGE_SETS * RECORDS_PER_PAGE
-
