@@ -67,7 +67,7 @@ class PageRange:
 
             # pointer access isn't as expensive, utilize this to alternate page reads
             for i in range(self.num_columns):
-                if query_columns[i] is not None:
+                if query_columns[i] is not None and query_columns[i] is not 0:
                     if (base_page_schema >> i) == 1:
                         read_data.append(tail_page_set[i].__read_record(1, tail_record_rid, tail_page_set_index, i))
                     else:
@@ -78,11 +78,7 @@ class PageRange:
     def __get_only_base_record(self, rid, page_set_index, query_columns):
         read_data = []
         for i in range(self.num_columns):
-            if query_columns[i] is None:
-                # read_data.append(None)
-                #TODO: Check if this should be uncommented
-                pass
-            else:
+            if query_columns[i] is not None and query_columns[i] is not 0:
                 read_data.append(self.__read_record(0, rid, page_set_index, i))
 
         return read_data
