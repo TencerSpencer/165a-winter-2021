@@ -12,5 +12,7 @@ query.insert(*[42, 6, 7, 8, 9, 10])
 # query.increment(420, 0)
 print(query.select(0, 0, [1,None, None, None, None]))
 print(query.select(42, 0, [1,None,None,None,None]))
+print(query.sum(0, 50, 0))
 query.delete(42)
 print(query.select(42, 0, [1,None,None,None,None]))
+

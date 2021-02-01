@@ -68,7 +68,17 @@ class Query:
     # Returns False if no record exists in the given range
     """
     def sum(self, start_range, end_range, aggregate_column_index):
-        pass
+        sum = 0
+        query_cols = [None] * self.table.num_columns;
+        query_cols[aggregate_column_index] = 1
+        run = False
+        for i in range(start_range, end_range):
+            result = self.select(i, 0, query_cols)
+            if (result):
+                sum += result[0]
+                run = True
+        if (not run): return False
+        return sum
 
     """
     incremenets one column of the record
