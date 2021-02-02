@@ -134,6 +134,7 @@ class PageRange:
         data = list(columns)
         tail_page_set_index, offset = self.tail_rids[prev_tail_rid][0:2]
         prev_tail_schema = self.tail_schema_encodings[offset]
+        offset = int(offset % RECORDS_PER_PAGE)  # get offset of the individual page
 
         # if a column in columns parameter is None, check if prev tail has a value for the column
         for i in range(self.num_columns):
