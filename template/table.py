@@ -26,9 +26,9 @@ class Table:
     def __init__(self, name, num_columns, key):
         self.name = name
         self.key = key  # This is the index of the table key in columns that are sent in
-        self.keys = {}  # key-value pairs { record key : (page range index, base page set index) }
+        self.keys = {}  # key-value pairs { key : rid }
         self.num_columns = num_columns
-        self.page_directory = {}  # are keys and page_directory the same thing?
+        self.page_directory = {}  # key-value pairs { rid : (page range index, base page set index) }
         self.index = Index(self)
         self.next_base_rid = START_RID
         self.next_tail_rid = START_RID
