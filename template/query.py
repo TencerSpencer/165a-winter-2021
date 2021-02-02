@@ -73,7 +73,7 @@ class Query:
         query_cols = [None] * self.table.num_columns
         query_cols[aggregate_column_index] = 1
         run = False
-        for i in range(start_range, end_range):
+        for i in range(start_range, end_range+1):
             result = self.select(i, 0, query_cols)
             if result:
                 sum += result[0].columns[aggregate_column_index]
