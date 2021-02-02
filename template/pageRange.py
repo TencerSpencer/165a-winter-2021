@@ -39,6 +39,8 @@ class PageRange:
         self.__write_base_record(rid, columns)
         self.num_base_records += 1
 
+        return True
+
     # setup is simplistic due to cumulative pages
     def get_record(self, base_record_rid, query_columns):
         base_page_set_index = self.base_rids[base_record_rid][0]
@@ -68,6 +70,8 @@ class PageRange:
                         read_data.append(self.__read_record(1, tail_record_rid, tail_page_set_index, i))
                     else:
                         read_data.append(self.__read_record(0, base_record_rid, base_page_set_index, i))
+                else:
+                    read_data.append(None)
 
             return read_data
 
@@ -123,6 +127,8 @@ class PageRange:
 
         # write new tail with new schema and previous tails rid
         self.__write_tail_record(tail_rid, new_schema, (0, prev_tail_rid) if prev_tail_rid == (None, None) else (1, prev_tail_rid), new_columns)
+
+        return True
 
     def __get_new_columns_for_new_tail(self, prev_tail_rid, columns):
         data = list(columns)

@@ -43,7 +43,9 @@ class Query:
     """
 
     def select(self, key, column, query_columns):
-        return self.table.select_record(key, query_columns)
+        data = self.table.select_record(key, query_columns)
+        records = [Record(data[0], key, data[1])]
+        return records
 
     """
     # Update a record with specified key and columns
@@ -68,10 +70,10 @@ class Query:
         query_cols = [None] * self.table.num_columns
         query_cols[aggregate_column_index] = 1
         run = False
-        for i in range(start_range, end_range):
+        for i in range(start_range, start_range + end_range):
             result = self.select(i, 0, query_cols)
             if result:
-                sum += result[0]
+                sum += result[0].columns[aggregate_column_index]
                 run = True
         if not run:
             return False

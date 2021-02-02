@@ -47,7 +47,7 @@ class Table:
         next_free_base_page_set_index = self.page_range_array[next_free_page_range_index].get_next_free_base_page_set()
 
         # set key and rid mappings
-        self.keys[key] = self.__get_next_base_rid()
+        self.keys[key] = new_rid
         self.page_directory[new_rid] = (next_free_page_range_index, next_free_base_page_set_index)
 
         # continue with inserting the record here
@@ -65,9 +65,10 @@ class Table:
             return False
 
         rid = self.keys[key]
-        page_range_index = self.page_range_array[rid][0]
+        page_range_index = self.page_directory[rid][0]
         cur_page_range = self.page_range_array[page_range_index]
-        return cur_page_range.get_record(rid, query_columns)
+        data = cur_page_range.get_record(rid, query_columns)
+        return rid, data
 
     def remove_record(self, key):
         if key in self.keys:
