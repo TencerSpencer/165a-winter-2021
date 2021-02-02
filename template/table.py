@@ -1,5 +1,6 @@
 from template.index import Index
 from template.pageRange import PageRange
+from template.config import *
 
 INDIRECTION_COLUMN = 0
 RID_COLUMN = 1
@@ -25,78 +26,64 @@ class Table:
     def __init__(self, name, num_columns, key):
         self.name = name
         self.key = key  # This is the index of the table key in columns that are sent in
-        self.keys = {}  # key-value pairs { record key : (rid, page range index, base page set index) }
+        self.keys = {}  # key-value pairs { record key : (page range index, base page set index) }
         self.num_columns = num_columns
         self.page_directory = {}  # are keys and page_directory the same thing?
         self.index = Index(self)
-        self.available_rid = 0
-
-        # adding an array of page ranges here
+        self.next_base_rid = START_RID
+        self.next_tail_rid = START_RID
         self.page_range_array = []
 
     def __merge(self):
         pass
 
     def insert_record(self, *columns):
-        column_to_read = self.key
-        current_rid = self.__get_next_rid()
-        # treat *columns as a list
+        key_col = self.key
+        new_rid = self.__get_next_base_rid()
         col_list = list(columns)
-        key_col = col_list[column_to_read]
+        key = col_list[key_col]
 
         next_free_page_range_index = self.__get_next_available_page_range()
         next_free_base_page_set_index = self.page_range_array[next_free_page_range_index].get_next_free_base_page_set()
 
-        # insert dictionary entry
-        self.__add_dict_record(key_col, current_rid, next_free_page_range_index, next_free_base_page_set_index)
-
-        col_list.pop(self.key)  # remove key entry; changed from remove to pop as
-        # pop removes at the provided INDEX while remove removes the provided
-        # VALUE
+        # set key and rid mappings
+        self.keys[key] = self.__get_next_base_rid()
+        self.page_directory[new_rid] = (next_free_page_range_index, next_free_base_page_set_index)
 
         # continue with inserting the record here
         curr_page_range = self.page_range_array[next_free_page_range_index]
-        curr_page_range._write_base_record(current_rid, col_list)
+        return curr_page_range.add_record(new_rid, col_list)
 
-    def __add_dict_record(self, key, new_rid, page_range_index, base_page_set_index):
-        # need to find page range index, so next free page range, and next free base page set index
-        self.keys[key] = (new_rid, page_range_index, base_page_set_index)
-
-    # todo, handler from query to table for update
     def update_record(self, key, *columns):
-        # key-value pairs { record key : (rid, page range index, base page set index) }
-        location_data = self.keys.get(key)
-        rid = location_data[0]
-        page_range_index = location_data[1]
-        cur_page_range = self.page_range_array[page_range_index]
+        base_rid = self.keys[key]
+        page_range_index = self.page_directory[base_rid][0]
+        tail_rid = self.__get_next_tail_rid()
+        return self.page_range_array[page_range_index].update_record(base_rid, tail_rid, columns)
 
-        base_rid = self.__get_rid_from_key(key)
-        tail_rid = cur_page_range.get_tail_rid(base_rid)
-        print(base_rid)
-        cur_page_range.update_record(base_rid, tail_rid, columns)
-
-    # todo, handler from query to table for select
     def select_record(self, key, query_columns):
-        # key-value pairs { record key : (rid, page range index, base page set index) }
-        location_data = self.keys.get(key)
-        if (location_data == None):
-            return False;
-        rid = location_data[0]
-        page_range_index = location_data[1]
+        if key not in self.keys:
+            return False
+
+        rid = self.keys[key]
+        page_range_index = self.page_range_array[rid][0]
         cur_page_range = self.page_range_array[page_range_index]
         return cur_page_range.get_record(rid, query_columns)
 
-    # todo, handler from query to table for remove
     def remove_record(self, key):
-        self.keys.pop(key)
-        pass
+        if key in self.keys:
+            self.keys.pop(key)
+            return True
 
-        # page set function will be within a page range, not here
+        return False
 
-    # build new RID
-    def __get_next_rid(self):
-        current_rid = self.available_rid
-        self.available_rid = self.available_rid + 1
+    def __get_next_base_rid(self):
+        current_rid = self.next_base_rid
+        self.next_base_rid += 1
+        return current_rid
+
+    def __get_next_tail_rid(self):
+        current_rid = self.next_tail_rid
+        self.next_tail_rid += 1
         return current_rid
 
     # returns an index of the next available page range
@@ -110,22 +97,12 @@ class Table:
 
         # note, I assume that base records will be removed at some point, so I choose to loop through each
         for i in range(len(self.page_range_array)):
-            if not self.page_range_array[i]._is_full():
+            if not self.page_range_array[i].is_full():
                 return i
 
-        # if we reeached here, then all our current page ranges are full. As such, build a new one
+        # if we reached here, then all our current page ranges are full. As such, build a new one
         new_page_range = PageRange(self.num_columns)
         self.page_range_array.append(new_page_range)
 
         # length returns an index + 1, so subtract one to compensate
         return len(self.page_range_array) - 1
-
-    def __get_rid_from_key(self, key):
-        return self.keys[key][0]
-
-    def __get_page_range_from_key(self, key):
-        return self.keys[key][1]
-
-    # may not be necessary
-    def __get_page_set_from_key(self, key):
-        return self.keys[key][2]

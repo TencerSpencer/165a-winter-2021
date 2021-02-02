@@ -32,7 +32,7 @@ class PageRange:
         self.tail_page_sets.append(PageSet(self.num_columns))
 
     def add_record(self, rid, columns):
-        if self.__is_full():
+        if self.is_full():
             return
 
         # add record to appropriate page set
@@ -230,5 +230,5 @@ class PageRange:
         return not self.tail_page_sets[-1].has_capacity()
 
     # Keep this function public so that table can check if this page range is full or not
-    def __is_full(self):
+    def is_full(self):
         return not self.num_base_records < PAGE_SETS * RECORDS_PER_PAGE

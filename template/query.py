@@ -17,27 +17,21 @@ class Query:
     """
     # internal Method
     # Read a record with specified RID
-    # Returns True upon succesful deletion
+    # Returns True upon successful deletion
     # Return False if record doesn't exist or is locked due to 2PL
     """
+
     def delete(self, key):
-        # for now, all this has to do is invalidate a key
-        self.table.remove_record(key)
-        pass
+        return self.table.remove_record(key)
 
     """
     # Insert a record with specified columns
-    # Return True upon succesful insertion
+    # Return True upon successful insertion
     # Returns False if insert fails for whatever reason
     """
+
     def insert(self, *columns):
-
-        # Can call insert record from table.py
-        self.table.insert_record(*columns)
-
-        # schema_encoding = 0 * self.table.num_columns
-        # schema_encoding = 0
-        return True;
+        return self.table.insert_record(*columns)
 
     """
     # Read a record with specified key
@@ -53,11 +47,12 @@ class Query:
 
     """
     # Update a record with specified key and columns
-    # Returns True if update is succesful
+    # Returns True if update is successful
     # Returns False if no records exist with given key or if the target record cannot be accessed due to 2PL locking
     """
+
     def update(self, key, *columns):
-        self.table.update_record(key, *columns)
+        return self.table.update_record(key, *columns)
 
     """
     :param start_range: int         # Start of the key range to aggregate 
@@ -67,27 +62,30 @@ class Query:
     # Returns the summation of the given range upon success
     # Returns False if no record exists in the given range
     """
+
     def sum(self, start_range, end_range, aggregate_column_index):
         sum = 0
-        query_cols = [None] * self.table.num_columns;
+        query_cols = [None] * self.table.num_columns
         query_cols[aggregate_column_index] = 1
         run = False
         for i in range(start_range, end_range):
             result = self.select(i, 0, query_cols)
-            if (result):
+            if result:
                 sum += result[0]
                 run = True
-        if (not run): return False
+        if not run:
+            return False
         return sum
 
     """
-    incremenets one column of the record
+    increments one column of the record
     this implementation should work if your select and update queries already work
     :param key: the primary of key of the record to increment
     :param column: the column to increment
     # Returns True is increment is successful
     # Returns False if no record matches key or if target record is locked by 2PL.
     """
+
     def increment(self, key, column):
         r = self.select(key, self.table.key, [1] * self.table.num_columns)[0]
         if r is not False:
@@ -96,4 +94,3 @@ class Query:
             u = self.update(key, *updated_columns)
             return u
         return False
-
