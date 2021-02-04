@@ -33,7 +33,7 @@ class PageRange:
 
     def add_record(self, rid, columns):
         if self.is_full():
-            return
+            return False
 
         # add record to appropriate page set
         self.__write_base_record(rid, columns)
