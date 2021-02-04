@@ -2,11 +2,6 @@ from template.index import Index
 from template.pageRange import PageRange
 from template.config import *
 
-INDIRECTION_COLUMN = 0
-RID_COLUMN = 1
-TIMESTAMP_COLUMN = 2
-SCHEMA_ENCODING_COLUMN = 3
-
 
 class Record:
 
