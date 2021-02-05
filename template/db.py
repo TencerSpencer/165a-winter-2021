@@ -29,9 +29,6 @@ class Database():
     def drop_table(self, name):
         if name in self.tables.keys():
             self.tables.pop(name)
-            print("Table has been removed")
-        else:
-            print("Table is not found")
         
 
     """
