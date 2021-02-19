@@ -11,6 +11,7 @@ class Disk:
         self.tail_meta_fn = TABLE_BASE_PATH + file_name + ".tmeta"
         self.page_directory_fn = TABLE_BASE_PATH + file_name + ".pd"
 
+    # returns base page set with associated tail page sets
     def read(self, base_rid):
         pass
 
