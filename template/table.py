@@ -1,6 +1,7 @@
 from template.index import Index
 from template.pageRange import PageRange
 from template.config import *
+import datetime, threading, time
 
 
 class Record:
@@ -28,9 +29,32 @@ class Table:
         self.next_base_rid = START_RID
         self.next_tail_rid = START_RID
         self.page_range_array = []
+        
+        # setup merge variables
+        self.next_time_to_call = time.time() # prepare consistent time callback
+        self.thread = self.thread = threading.Timer(self.next_time_to_call - time.time(), self.__merge_callback)
+        self.thread.start()
+        self.timer_interval = 0.5 # every half a second, the timer will trigger, used as an example
+
+
+    # for help with background process operation and to ensure timer is consistent
+    # https://stackoverflow.com/questions/8600161/executing-periodic-actions-in-python
+    def __merge_callback(self): 
+        
+        print(datetime.datetime.now())
+        self.next_time_to_call = self.next_time_to_call + self.timer_interval
+        # call _merge
+        self.thread = threading.Timer(self.next_time_to_call - time.time(), self.__merge_callback)
+        self.thread.start()
 
     def __merge(self):
         pass
+
+    def shut_down_timer(self):
+        self.thread.cancel() # use this to halt timer
+        pass
+
+
 
     def insert_record(self, *columns):
         key_col = self.key

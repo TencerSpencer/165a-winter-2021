@@ -1,3 +1,5 @@
+import sys
+sys.path.append("./")
 from template.db import Database
 from template.query import Query
 from time import process_time
@@ -52,3 +54,6 @@ for i in range(0, 10000):
     query.delete(906659671 + i)
 delete_time_1 = process_time()
 print("Deleting 10k records took:  \t\t\t", delete_time_1 - delete_time_0)
+
+# temporary, but the m2 testers do close the DB, so np
+db.close()
