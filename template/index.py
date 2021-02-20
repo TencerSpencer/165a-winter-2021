@@ -2,41 +2,45 @@
 A data structure holding indices for various columns of a table. Key column should be indexed by default, other columns can be indexed through this object. Indices are usually B-Trees, but other data structures can be used as well.
 In-Memory ONLY
 """
-
 class Index:
 
     def __init__(self, table):
         # One index for each table (?) All are empty initially.
-        self.indices = [None] *  table.num_columns
-        pass
+        self.indices = [None] *  table.num_columns 
+        for i in range(table.num_columns):
+            self.indices[i] = RHash()
 
     """
     # returns the location (RID?) of all records with the given value on column "column"
     """
 
-    def locate(self, column, value):
-        pass
+    def locate(self, column, value): #how do we identify which index is for which column?
+        indexRhash = self.indices[column]
+        indexRhash[value].rids 
+        return index[key].rids
 
     """
     # Returns the RIDs of all records with values in column "column" between "begin" and "end"
     """
 
     def locate_range(self, column, begin, end):
-        pass
+        indexRhash = self.indices[column]
+        return indexRhash.get_range(begin, end)
 
     """
     # optional: Create index on specific column
     """
 
     def create_index(self, column_number):
-        pass
+        
 
     """
     # optional: Drop index of specific column
     """
 
     def drop_index(self, column_number):
-        pass
+        self.indices[column_number] = None
+        
 
 
 class RHashNode:
@@ -47,16 +51,16 @@ class RHashNode:
         self.prev_node = prev_node
         self.next_node = next_node
 
-    def getValue(self):
+    def get_value(self):
         return value
 
-    def getRID(self):
-        return rid
+    def get_RIDs(self):
+        return rids
 
-    def getPrevNode(self):
+    def get_prev_node(self):
         return prev_value
 
-    def getNextNode(self):
+    def get_next_node(self):
         return next_value
 
 class RHash:
@@ -69,6 +73,20 @@ class RHash:
         self.dictionary = {} # column value to RHashNode
         self.head = None
         self.tail = None
+
+    def get(self, value):
+        # Error checking?
+        if dictionary.get(value, None) == None:
+            return []
+        return dictionary[value].rids
+        
+    def get_range(self, begin, end):
+        # get the first node 
+        rids = [] 
+        node = self.__getClosestNode(begin)
+        while node != None and node.value <= end:
+            rids.extend(node.get_RIDs())
+            node = node.next_node
 
     def __insert_into_empty_dictionary(self, value, rid): 
         new_node = RHashNode(value, rid)
@@ -98,16 +116,8 @@ class RHash:
         closestNode = self.__getClosestNode(value)
         # print(closestNode.value)(value)
         # traverse the doubly-linked list to find a node such that:
-        # closestNode.value 
         # closestNode.value > value AND closestNode.prev_node.value < value
-        # Determine whether we need to go up or down
-        if closestNode.prev_node != None:
-            while closestNode.prev_node.value > value:
-                # Traverse DOWN
-                closestNode = closestNode.prev_node
-        while closestNode.value < value:
-            # Traverse UP
-            closestNode = closestNode.next_node
+        
         # Found closest node to meet conditions
         self.__insert_before_item_in_list(closestNode, value, rid)
         return
@@ -142,30 +152,18 @@ class RHash:
             if newDelta < maxDelta:
                 closestNode = node
                 maxDelta = newDelta
+        # Determine whether we need to go up or down
+        if closestNode.prev_node != None:
+            while closestNode.prev_node.value > value:
+                # Traverse DOWN
+                closestNode = closestNode.prev_node
+        while closestNode.value < value:
+            # Traverse UP
+            closestNode = closestNode.next_node
         return closestNode
 
 
-    """
-    def __insert_into_single_item_dictionary(self, rid, value):
-        # get the item in the dictionary
-        extantNode = self.head
-        newNode = RHashNode(rid, value)
-        if extantNode.value > value:
-            # need to have newNode be the head of the list
-            extantNode.prev_node = newNode
-            newNode.next_node = extantNode
-            self.head = newNode
-        else:
-            # newNode needs to be the tail of the list
-            extantNode.next_node = newNode
-            newNode.prev_node = extantNode
-            self.tail = newNode
-        # update these nodes in self
-        self.dictionary[value] = newNode
-        self.dictionary[extantNode.value] = extantNode
-        return
 
-    """
     def __insert_before_item_in_list(self, nextNode, value, rid):
         new_node = RHashNode(value, rid)
         
@@ -252,3 +250,24 @@ class RHash:
                     prev_node = nodeToCheck.getPrevNode() #prev node?
                     if prev_node >= newNode.getValue():
         """
+            """
+    def __insert_into_single_item_dictionary(self, rid, value):
+        # get the item in the dictionary
+        extantNode = self.head
+        newNode = RHashNode(rid, value)
+        if extantNode.value > value:
+            # need to have newNode be the head of the list
+            extantNode.prev_node = newNode
+            newNode.next_node = extantNode
+            self.head = newNode
+        else:
+            # newNode needs to be the tail of the list
+            extantNode.next_node = newNode
+            newNode.prev_node = extantNode
+            self.tail = newNode
+        # update these nodes in self
+        self.dictionary[value] = newNode
+        self.dictionary[extantNode.value] = extantNode
+        return
+
+    """
