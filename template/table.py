@@ -32,7 +32,7 @@ class Table:
         
         # setup merge variables
         self.next_time_to_call = time.time() # prepare consistent time callback
-        self.timer_interval = 0.5 # every half a second, the timer will trigger, used as an example
+        self.timer_interval = 0.25 # every fourth a second, the timer will trigger, used as an example
         self.thread_in_crit_section = False
         self.thread_stopped = False
         self.rids_to_merge = set()

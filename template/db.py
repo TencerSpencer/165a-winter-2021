@@ -11,7 +11,6 @@ class Database():
 
     def close(self):
         # when close is called, we must shutdown the timer for each table
-        #tables = self.__get_tables_for_close()
         tables = self.tables.values()
         for table in tables:
             table.shut_down_timer()
@@ -40,15 +39,3 @@ class Database():
     """
     def get_table(self, name): 
         return self.tables.get(name)
-
-
-    """
-    # get all tables in array form
-    """
-    def __get_tables_for_close(self):
-        test = self.tables.values()
-        keys = self.tables.keys()
-        tables = []
-        for i in range(keys):
-            tables.append(self.tables.get(i))
-        return tables
