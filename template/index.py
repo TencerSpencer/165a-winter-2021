@@ -6,6 +6,7 @@ class Index:
 
     def __init__(self, table):
         # One index for each table (?) All are empty initially.
+        self.table = table
         self.indices = [None] *  table.num_columns 
         for i in range(table.num_columns):
             self.indices[i] = RHash()
@@ -16,8 +17,8 @@ class Index:
 
     def locate(self, column, value): #how do we identify which index is for which column?
         indexRhash = self.indices[column]
-        indexRhash[value].rids 
-        return index[key].rids
+        # indexRhash[value].rids 
+        return indexRhash.get(value)
 
     """
     # Returns the RIDs of all records with values in column "column" between "begin" and "end"
@@ -32,7 +33,13 @@ class Index:
     """
 
     def create_index(self, column_number):
-        
+        query_cols = [None] * self.table.num_columns
+        query_cols[column_number] = 1
+        # [None, None, 1, None, None]
+        for key in self.table.keys:
+            record = self.table.select_record(key, query_cols)
+            self.indices[column_number].insert(record[1][column_number], record[0])
+            
 
     """
     # optional: Drop index of specific column
@@ -40,7 +47,11 @@ class Index:
 
     def drop_index(self, column_number):
         self.indices[column_number] = None
-        
+
+    """Sum over the specified range"""
+    def get_sum(self, column, begin, end):
+        return self.get_sum(column, begin, end)
+
 
 
 class RHashNode:
@@ -52,16 +63,16 @@ class RHashNode:
         self.next_node = next_node
 
     def get_value(self):
-        return value
+        return self.value
 
     def get_RIDs(self):
-        return rids
+        return self.rids
 
     def get_prev_node(self):
-        return prev_value
+        return self.prev_value
 
     def get_next_node(self):
-        return next_value
+        return self.next_value
 
 class RHash:
 
@@ -76,9 +87,9 @@ class RHash:
 
     def get(self, value):
         # Error checking?
-        if dictionary.get(value, None) == None:
+        if self.dictionary.get(value, None) == None:
             return []
-        return dictionary[value].rids
+        return self.dictionary[value].rids
         
     def get_range(self, begin, end):
         # get the first node 
@@ -87,6 +98,15 @@ class RHash:
         while node != None and node.value <= end:
             rids.extend(node.get_RIDs())
             node = node.next_node
+        return rids
+
+    def get_sum(self, begin, end):
+        sum = 0
+        node = self.__getClosestNode(begin)
+        while node != None and node.value <= end:
+            sum += node.value * len(node.get_RIDs())
+            node = node.next_node
+        return sum
 
     def __insert_into_empty_dictionary(self, value, rid): 
         new_node = RHashNode(value, rid)
@@ -97,6 +117,7 @@ class RHash:
 
     def insert(self, value, rid):
             # Case 1: Item exists in the dictionary
+        print(value)
         if value in self.dictionary:
             self.dictionary[value].rids.append(rid)
             return
@@ -120,6 +141,7 @@ class RHash:
         
         # Found closest node to meet conditions
         self.__insert_before_item_in_list(closestNode, value, rid)
+        print("Inserted " + str(value) + " into list")
         return
     
     def remove(self, value, rid):
@@ -143,15 +165,16 @@ class RHash:
             self.dictionary[value].rids.remove(rid)
 
     def __getClosestNode(self, value):
-        if len(self.seeds) == 0:
-            return self.head
         closestNode = None
-        maxDelta = float(inf)
-        for node in self.seeds:
-            newDelta = math.abs(value - node.value)
-            if newDelta < maxDelta:
-                closestNode = node
-                maxDelta = newDelta
+        if len(self.seeds) == 0:
+            closestNode = self.head
+        else:
+            maxDelta = float(inf)
+            for node in self.seeds:
+                newDelta = math.abs(value - node.value)
+                if newDelta < maxDelta:
+                    closestNode = node
+                    maxDelta = newDelta
         # Determine whether we need to go up or down
         if closestNode.prev_node != None:
             while closestNode.prev_node.value > value:
@@ -200,74 +223,3 @@ class RHash:
             print(node.rids)
             node = node.next_node
         
-     
-# node0 <--> node1 <--> node2
-#        ^ node3
-
-# node0 <--> node1 <--> node2
-#    ^--node3--^
-
-# node0 <--> node3 <--> node1 <--> node2
-
-"""
-    def insert(self, rid, value):
-        #newNode = RHashNode(rid, value)
-        # 4 cases:
-        # Case 1: Item exists in the dictionary
-        if rid in self.dictionary:
-            self.dictionary[value].value.append(rid)
-            return
-        # no items in the dictionary
-        # None <--> newNode <--> None
-        if len(self.dictionary) == 0:
-            __insert_into_empty_dictionary(rid, value)
-        # 1 item in the dictionary
-        # None <--> newNode <--> nodeToCheck <--> None
-        # OR None <--> nodeToCheck <--> newNode <--> None
-        if len(self.dictionary) == 1:
-            __insert_into_single_item_dictionary(rid, value)
-        # 2+ items in the dictionary
-        
-        # find the prev node and next node
-        # trying to find the node with largest value less than "value"
-        # and the node with the smallest value greater than "value"
-        closestNode = __getClosestNode(value)
-        # traverse the doubly-linked list to find a node such that:
-        # node.value <= newNode.value AND
-        # node.next_node.value >= newNode.value
-        node = None
-        if closestNode.value <= value:
-            node = traverseUp(closestNode, value)
-        else:
-            node = traverseDown(closestNode, value)
-        # Now, (node.value <= value OR node == None) AND (node.next_node.value >= value OR node == None)
-        # Can we just insert before?
-        
-        # Oh my god why are there so many cases
-        while (nodeToCheck != None):
-            if nodeToCheck.getValue() >= newNode.getValue():
-                if (nodeToCheck.getPrevNode() != None):
-                    prev_node = nodeToCheck.getPrevNode() #prev node?
-                    if prev_node >= newNode.getValue():
-        """
-            """
-    def __insert_into_single_item_dictionary(self, rid, value):
-        # get the item in the dictionary
-        extantNode = self.head
-        newNode = RHashNode(rid, value)
-        if extantNode.value > value:
-            # need to have newNode be the head of the list
-            extantNode.prev_node = newNode
-            newNode.next_node = extantNode
-            self.head = newNode
-        else:
-            # newNode needs to be the tail of the list
-            extantNode.next_node = newNode
-            newNode.prev_node = extantNode
-            self.tail = newNode
-        # update these nodes in self
-        self.dictionary[value] = newNode
-        self.dictionary[extantNode.value] = extantNode
-        return
-
-    """

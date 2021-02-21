@@ -63,6 +63,7 @@ class Table:
         page_range_index = self.page_directory[rid][0]
         cur_page_range = self.page_range_array[page_range_index]
         data = cur_page_range.get_record(rid, query_columns)
+        
         return rid, data
 
     def remove_record(self, key):
