@@ -37,8 +37,17 @@ class Table:
         self.thread_stopped = False
         self.rids_to_merge = set()
         # initially, call the thread instantly
+        
+        # prevent timer from executing if we are performing an update with a mutex
+        # https://docs.python.org/3/library/threading.html#threading.Lock.acquire
+        self.disk_mutex = threading.Lock()
+
         self.thread = self.thread = threading.Timer(self.next_time_to_call - time.time(), self.__merge_callback)
+        
+        
+        # when we start the timer, any class variables assigned after may not be captured
         self.thread.start()
+
 
 
     # for help with background process operation and to ensure timer is consistent
@@ -46,9 +55,17 @@ class Table:
     def __merge_callback(self): 
 
         if self.thread_stopped == False:
+            
+            # force to wait until update is done
+            # what if u start an update while merging occurs? This should be okay because we work with copies
+            self.disk_mutex.acquire()
+            
             print(datetime.datetime.now())
             # call _merge
             self.__merge()
+            
+            self.disk_mutex.release()
+            
             self.thread_in_crit_section = False
             self.thread = threading.Timer(self.next_time_to_call - time.time(), self.__merge_callback)
             self.next_time_to_call = self.next_time_to_call + self.timer_interval
@@ -57,8 +74,8 @@ class Table:
     def shut_down_timer(self): # if constant printing is occurring, this wont properly stop
         if self.thread_in_crit_section:
             # kill a certain way
-            # self.thread.join()
             self.thread_stopped = True
+            self.thread.join()
         else:
             self.thread.cancel()
              # use this to halt timer, but does not halt thread as per documentation
@@ -78,18 +95,51 @@ class Table:
             rid_set = copy.deepcopy(self.rids_to_merge)
             self.rids_to_merge.clear()
             for base_rid in rid_set:
-                print(base_rid)
+                
+
                        
-                # 1. bring original base page to mem and copy it over
-            
+                # 1. get original base page
                 # base_and_tail = read(base_rid) # should return the base and tail 
+                
+                # Emulate in mem
+                emulated_info = self.__get_record_and_tail(base_rid)
+                base_record = emulated_info[0]
+                
+                # 3. get the most up to date tail for the base record and put it in mem
+                tail_record = emulated_info[1]
+                #print(tail_record)
+                schema = emulated_info[2]
+
+                """
+                print(base_record)
+                print(tail_record)
+                print(schema)
+                print("\n")
+                """
 
                 # 2. make a copy of the original base record to ensure mutual exclusion
-                # 3. get the most up to date tail for the base record and put it in mem
+                base_record_copy = copy.deepcopy(base_record)
+
                 # 4. append data from tail to base record
+                new_base_record = []
+                for i in range(self.num_columns):
+                    # from page_range
+                    if i == 0: # append key
+                        new_base_record.append(base_record_copy[i])
+                    elif (schema >> self.num_columns - 1 - i) & 1:
+                        new_base_record.append(base_record_copy[i])
+                    else:
+                        new_base_record.append(tail_record[i])
+
+
+                # I was getting the incorrect tail.. this fixes it
+                page_range_index = self.page_directory[base_rid][0]
+                cur_page_range = self.page_range_array[page_range_index]
+                data = cur_page_range.get_record(base_rid, [1, 1, 1, 1, 1])
+               # new_base_record = data
+                
                 # 5. allocate space to new base record on page with available space
                 # 6. do we leave the rest of the tail untouched and just deallocate it from memory?
-            
                 # some of these steps can be done in their own for loop to prevent lengthy block
                 # 7. keep original base page in mem/intact until no queries are being ran on it i.e. update/select
                 # 8. once original is no longer needed, update page directory to point to newe base record
@@ -97,6 +147,25 @@ class Table:
                 # or, do we assign a new RID to the new base, and free up the RID of the previous?
                 # 10. do this for each baseRID in the set
 
+                # For now, I am just going to write this new base record over the previous i.e.
+                self.__overwite_previous_base_record(base_rid, new_base_record)
+                
+
+            print("merge complete")
+
+
+    # THIS FUNCTION WILL BE REMOVED AND IS ONLY USED TO TEST MERGES PURELY IN MEM
+    def __get_record_and_tail(self, base_rid):
+        page_range_index = self.page_directory[base_rid][0]
+        cur_page_range = self.page_range_array[page_range_index]
+        return cur_page_range.get_info_for_merge(base_rid)
+
+    # THIS FUNCTION WILL BE REMOVED AND IS ONLY USED TO TEST MERGES PURELY IN MEM
+    # force schema to be zero
+    def __overwite_previous_base_record(self, base_rid, new_data):
+        page_range_index = self.page_directory[base_rid][0]
+        cur_page_range = self.page_range_array[page_range_index]
+        cur_page_range.overwrite_previous_base_record(base_rid, new_data)
 
 
     def insert_record(self, *columns):
@@ -117,14 +186,23 @@ class Table:
         return curr_page_range.add_record(new_rid, col_list)
 
     def update_record(self, key, *columns):
+
+        # use mutex to prevent contention
+        self.disk_mutex.acquire()
+
         base_rid = self.keys[key]
         page_range_index = self.page_directory[base_rid][0]
         tail_rid = self.__get_next_tail_rid()
-        
-        # append to base RID to a set of RIDs to merge
+
+        result = self.page_range_array[page_range_index].update_record(base_rid, tail_rid, columns)
+
+        # append to base RID to a set of RIDs to merge, only do so after update is done
         self.rids_to_merge.add(base_rid)
 
-        return self.page_range_array[page_range_index].update_record(base_rid, tail_rid, columns)
+
+        self.disk_mutex.release()
+
+        return result
 
     def select_record(self, key, query_columns):
         if key not in self.keys:

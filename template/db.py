@@ -15,6 +15,9 @@ class Database():
         for table in tables:
             table.shut_down_timer()
 
+        # write everything else to disk here
+        print("database closed")
+
     """
     # Creates a new table
     :param name: string         #Table name

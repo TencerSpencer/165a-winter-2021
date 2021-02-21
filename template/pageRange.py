@@ -239,3 +239,52 @@ class PageRange:
     # Keep this function public so that table can check if this page range is full or not
     def is_full(self):
         return not self.num_base_records < PAGE_SETS * RECORDS_PER_PAGE
+
+
+
+
+    # THIS FUNCTION WILL BE REMOVED AND IS ONLY USED TO TEST MERGES PURELY IN MEM
+    # RETURN TUPLE OF BASE RECORD DATA, TAIL RECORD DATA, AND BASE SCHEMA
+    def get_info_for_merge(self, base_record_rid):
+        base_data = []
+        tail_data = []
+
+        # get base_page_set index
+        base_page_set_index = self.base_rids[base_record_rid][0]
+        
+        # obtain schema
+        base_record_offset = self.base_rids[base_record_rid][1]
+        base_page_schema = self.base_schema_encodings[base_record_offset]
+
+        # prepare tail_data
+        tail_record_rid = self.__get_indirection(base_record_rid)[1]
+        
+        tail_page_set_index = self.tail_rids[tail_record_rid][0]
+        
+        # get base_data and tail_data
+        for i in range(self.num_columns):
+            base_data.append(self.__read_record(0, base_record_rid, base_page_set_index, i))
+            tail_data.append(self.__read_record(1, tail_record_rid, tail_page_set_index, i))
+        
+        return base_data, tail_data, base_page_schema
+
+    # THIS FUNCTION WILL BE REMOVED AND IS ONLY USED TO TEST MERGES PURELY IN MEM
+    # RETURN TUPLE OF BASE RECORD DATA, TAIL RECORD DATA, AND BASE SCHEMA
+    def overwrite_previous_base_record(self, base_record_rid, new_data):
+        
+        base_page_set_index = self.base_rids[base_record_rid][0]
+        base_record_offset = self.base_rids[base_record_rid][1]
+        
+        # reset schema
+        self.base_schema_encodings[base_record_offset] = 0
+
+        # possibly reset indirection? wouldnt be hard
+        
+        # write data 
+        base_page_set = self.base_page_sets[base_page_set_index]
+
+        offset = int(self.base_rids[base_record_rid][1] % RECORDS_PER_PAGE)  # get offset of the individual page, from __read_record
+
+        for i in range(self.num_columns):
+            base_page_set.pages[i].temp_write(new_data[i], offset)
+
