@@ -42,7 +42,15 @@ class Query:
     """
 
     def select(self, key, column, query_columns):
-        data = self.table.select_record(key, query_columns)
+        data = None
+        if key != self.table.key:
+            # MUST build an index on column
+            if not self.table.index.is_index_built(column)
+                self.table.index.create_index(column)
+            rids = self.table.index.locate(column, key)
+            # Select all values in this rid TODO!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        else:
+            data = self.table.select_record(key, query_columns)
         if data:
             records = [Record(data[0], key, data[1])]
             return records

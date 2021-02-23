@@ -1,3 +1,4 @@
+from template.config import *
 """
 A data structure holding indices for various columns of a table. Key column should be indexed by default, other columns can be indexed through this object. Indices are usually B-Trees, but other data structures can be used as well.
 In-Memory ONLY
@@ -5,7 +6,7 @@ In-Memory ONLY
 class Index:
 
     def __init__(self, table):
-        # One index for each table (?) All are empty initially.
+        table.set_index(self)
         self.table = table
         self.indices = [None] *  table.num_columns 
         for i in range(table.num_columns):
@@ -38,19 +39,36 @@ class Index:
         # [None, None, 1, None, None]
         for key in self.table.keys:
             record = self.table.select_record(key, query_cols)
-            self.indices[column_number].insert(record[1][column_number], record[0])
-            
+            self.indices[column_number].insert(record[1][column_number], record[0], False)
+        self.indices[column_number].check_and_build_seeds()
+    
+    """ Checks if the index is built for column "column" """
+    def is_index_built(self, column_number):
+        if column_number >= self.table.num_columns:
+            return False
+        return self.indices[column_number].getSize != 0
 
     """
     # optional: Drop index of specific column
     """
-
     def drop_index(self, column_number):
-        self.indices[column_number] = None
+        self.indices[column_number] = RHash()
 
     """Sum over the specified range"""
     def get_sum(self, column, begin, end):
         return self.get_sum(column, begin, end)
+
+    """ Update the rid of the provided value in the provided column"""
+    def update_index(self, column_number, value, old_rid, new_rid):
+        if column_number >= self.table.num_columns:
+            return
+        self.indices[column_number].remove(value, old_rid)
+        self.indices[column_number].insert(value, new_rid)
+
+    def insert_into_index(self, column_number, value, rid):
+        if column_number >= self.table.num_columns:
+            return
+        self.indices[column_number].insert(value, rid, true)
 
 
 
@@ -69,27 +87,29 @@ class RHashNode:
         return self.rids
 
     def get_prev_node(self):
-        return self.prev_value
+        return self.prev_node
 
     def get_next_node(self):
-        return self.next_value
+        return self.next_node
 
 class RHash:
 
     def __init__(self):
-        # self.smallest_value
-        # self.largest_value
-        # self.seeds = [smallest, midpoint, largest]
         self.seeds = []
         self.dictionary = {} # column value to RHashNode
         self.head = None
         self.tail = None
+        self.size = 0 # Keeps track of the number of VALUES, NOT RIDs
+        self.last_seed_build_size = 0
 
     def get(self, value):
         # Error checking?
         if self.dictionary.get(value, None) == None:
             return []
         return self.dictionary[value].rids
+
+    def get_size(self):
+        return self.size
         
     def get_range(self, begin, end):
         # get the first node 
@@ -108,6 +128,28 @@ class RHash:
             node = node.next_node
         return sum
 
+    """ Rebuilds the seeds if size changes by some amount """
+    def check_and_build_seeds(self):
+        if self.size >= self.last_seed_build_size * SEED_REBUILD_THRESH:
+            # Rebuild seeds
+            # We want 3 seeds for 100 <= size < 1000
+            num_seeds = 1 # Not including the head, tail
+            if self.size >= 1000:
+                num_seeds = int(self.size / 1_000)
+            # Init seeds
+            self.seeds = []
+            node = self.head
+            interval = int(self.size * 1/(num_seeds+1))
+            counter = 0
+            while node.next_node != None:
+                if (counter % interval) == 0:
+                    self.seeds.append(node)
+                counter += 1
+                node = node.get_next_node()
+            # add the tail
+            self.seeds.append(self.tail)
+
+
     def __insert_into_empty_dictionary(self, value, rid): 
         new_node = RHashNode(value, rid)
         self.head = new_node
@@ -115,38 +157,39 @@ class RHash:
         self.tail.next_node = None
         self.dictionary[value] = new_node
 
-    def insert(self, value, rid):
-            # Case 1: Item exists in the dictionary
-        print(value)
+    def insert(self, value, rid, checkSeeds):
+        # Case 1: Item exists in the dictionary
         if value in self.dictionary:
             self.dictionary[value].rids.append(rid)
             return
+        # Since we know we will be adding a new value, increment the size
+        self.size += 1
         # Case 2: Dictionary is empty
         if len(self.dictionary) == 0:
             self.__insert_into_empty_dictionary(value, rid)
-            return
         # Case 3: Value is less than the head; push
-        if value < self.head.value:
+        elif value < self.head.value:
             self.__push(value, rid)
-            return
         # Case 4: Value is greater than the tail; append
-        if value > self.tail.value:
+        elif value > self.tail.value:
             self.__append(value, rid)
-            return
-        # Case 5: Somewhere in the middle
-        closestNode = self.__getClosestNode(value)
-        # print(closestNode.value)(value)
-        # traverse the doubly-linked list to find a node such that:
-        # closestNode.value > value AND closestNode.prev_node.value < value
-        
-        # Found closest node to meet conditions
-        self.__insert_before_item_in_list(closestNode, value, rid)
-        print("Inserted " + str(value) + " into list")
+        else:
+            # Case 5: Somewhere in the middle
+            closestNode = self.__getClosestNode(value)
+            # print(closestNode.value)(value)
+            # traverse the doubly-linked list to find a node such that:
+            # closestNode.value > value AND closestNode.prev_node.value < value
+            
+            # Found closest node to meet conditions
+            self.__insert_before_item_in_list(closestNode, value, rid)
+            # print("Inserted " + str(value) + " into list")
+        if checkSeeds:
+            self.check_and_build_seeds()
         return
-    
+
     def remove(self, value, rid):
         if len(self.dictionary[value].rids) == 1:
-
+            self.size -= 1
             # Completely remove this entry
             nodeToRemove = self.dictionary[value]
             if nodeToRemove == self.head:
@@ -169,9 +212,9 @@ class RHash:
         if len(self.seeds) == 0:
             closestNode = self.head
         else:
-            maxDelta = float(inf)
+            maxDelta = float('inf')
             for node in self.seeds:
-                newDelta = math.abs(value - node.value)
+                newDelta = abs(value - node.value)
                 if newDelta < maxDelta:
                     closestNode = node
                     maxDelta = newDelta

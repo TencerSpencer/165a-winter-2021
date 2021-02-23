@@ -28,6 +28,10 @@ class Table:
         self.next_base_rid = START_RID
         self.next_tail_rid = START_RID
         self.page_range_array = []
+        self.index = None
+    
+    def set_index(self, index):
+        self.index = index
 
     def __merge(self):
         pass
