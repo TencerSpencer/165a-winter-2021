@@ -130,7 +130,7 @@ class RHash:
 
     """ Rebuilds the seeds if size changes by some amount """
     def check_and_build_seeds(self):
-        if self.size >= self.last_seed_build_size * SEED_REBUILD_THRESH:
+        if self.size >= self.last_seed_build_size * SEED_REBUILD_THRESH or self.last_seed_build_size > self.size * SEED_REBUILD_THRESH:
             # Rebuild seeds
             # We want 3 seeds for 100 <= size < 1000
             num_seeds = 1 # Not including the head, tail
@@ -203,6 +203,7 @@ class RHash:
                 nodeToRemove.next_node.prev_node = nodeToRemove.prev_node
             # self.dictionary.pop(value)
             del self.dictionary[value]
+            self.check_and_build_seeds()
         else:
             # just remove the rid from value array
             self.dictionary[value].rids.remove(rid)
