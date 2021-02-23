@@ -11,16 +11,10 @@ class Disk:
         self.key_column = None
         self.next_base_rid = None
         self.next_tail_rid = None
-        self.base_fn = TABLE_BASE_PATH + table_name + ".base"  # holds base records
-        self.tail_fn = TABLE_BASE_PATH + table_name + ".tail"  # holds tail records
+        self.base_fn = TABLE_BASE_PATH + table_name + ".base"  # holds base record data
+        self.tail_fn = TABLE_BASE_PATH + table_name + ".tail"  # holds tail record data
         self.info_fn = TABLE_BASE_PATH + table_name + ".info"  # holds table info
-        self.base_meta_fn = TABLE_BASE_PATH + table_name + ".bmeta"  # uses base rids to indicate the start block of a page ranges and base page sets meta data
-        self.tail_meta_fn = TABLE_BASE_PATH + table_name + ".tmeta"  # uses tail rids to indicate the start block of a tail page sets meta data
-        self.keys_fn = TABLE_BASE_PATH + table_name + ".keys"  # uses entry as index
-        self.brid_fn = TABLE_BASE_PATH + table_name + ".brid"  # uses entry as index
-        self.trid_fn = TABLE_BASE_PATH + table_name + ".trid"  # uses entry as index
-        self.base_page_directory_fn = TABLE_BASE_PATH + table_name + ".bpd"  # uses entry as index
-        self.tail_page_directory_fn = TABLE_BASE_PATH + table_name + ".tpd"  # uses entry as index
+        self.key_directory = TABLE_BASE_PATH + table_name + ".kd"
 
     # returns base page set with associated tail page sets
     def read(self, base_rid):
