@@ -95,8 +95,14 @@ class Disk:
         f.close()
         return page
 
-    def read_tail_page(self, tail_page_set_index, base_page_index):
-        pass
+    def read_tail_page(self, data_block_start_index, tail_page_index):
+        page = Page()
+        file_offset = (data_block_start_index + tail_page_index) * PAGE_SIZE
+        f = open(self.tail_fn, "rb")
+        f.seek(file_offset)
+        page.data = f.read(PAGE_SIZE)
+        f.close()
+        return page
 
     def read_base_page_set(self, page_range_index, base_page_set_index):
         page_set = PageSet(self.num_columns)
@@ -109,8 +115,15 @@ class Disk:
         f.close()
         return page_set
 
-    def read_tail_page_set(self, tail_page_set_index):
-        pass
+    def read_tail_page_set(self, data_block_start_index):
+        page_set = PageSet(self.num_columns)
+        file_offset = data_block_start_index * PAGE_SIZE
+        f = open(self.tail_fn, "rb")
+        f.seek(file_offset)
+        for i in range(self.num_columns):
+            page_set.pages[i].data = f.read(PAGE_SIZE)
+        f.close()
+        return page_set
 
     def read_page_range(self, page_range_index):
         page_sets = []
@@ -220,4 +233,7 @@ class Disk:
         pass
 
     def write_tail_page_set(self, tail_page_set_index):
+        pass
+
+    def write_table_info(self, table_name, num_columns, next_base_rid, next_tail_rid):
         pass
