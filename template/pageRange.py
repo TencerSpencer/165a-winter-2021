@@ -275,11 +275,6 @@ class PageRange:
         base_page_set_index = self.base_rids[base_record_rid][0]
         base_record_offset = self.base_rids[base_record_rid][1]
         
-        # reset schema
-        self.base_schema_encodings[base_record_offset] = 0
-
-        # possibly reset indirection? wouldnt be hard
-        
         # write data 
         base_page_set = self.base_page_sets[base_page_set_index]
 

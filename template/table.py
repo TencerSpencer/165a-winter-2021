@@ -29,6 +29,9 @@ class Table:
         self.next_base_rid = START_RID
         self.next_tail_rid = START_RID
         self.page_range_array = []
+
+        # handlers for deallocation merge
+        self.query_queue = {}
         
         # setup merge variables
         self.next_time_to_call = time.time() # prepare consistent time callback
@@ -133,10 +136,15 @@ class Table:
 
 
                 # I was getting the incorrect tail.. this fixes it
+
+                # todo: need to allocate new space
                 page_range_index = self.page_directory[base_rid][0]
                 cur_page_range = self.page_range_array[page_range_index]
+
+                # temp way to get combined base and up to date tail record
                 data = cur_page_range.get_record(base_rid, [1, 1, 1, 1, 1])
-               # new_base_record = data
+                
+                new_base_record = data
                 
                 # 5. allocate space to new base record on page with available space
                 # 6. do we leave the rest of the tail untouched and just deallocate it from memory?
@@ -148,7 +156,9 @@ class Table:
                 # 10. do this for each baseRID in the set
 
                 # For now, I am just going to write this new base record over the previous i.e.
-                self.__overwite_previous_base_record(base_rid, new_base_record)
+                #self.__overwite_previous_base_record(base_rid, new_base_record)
+
+
                 
 
             print("merge complete")
@@ -208,6 +218,7 @@ class Table:
         if key not in self.keys:
             return False
 
+        self.query_queue[rid] = time.time()        
         rid = self.keys[key]
         page_range_index = self.page_directory[rid][0]
         cur_page_range = self.page_range_array[page_range_index]
