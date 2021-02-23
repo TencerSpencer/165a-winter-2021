@@ -11,6 +11,27 @@ class Record:
         self.key = key
         self.columns = columns
 
+class MergeHandler:
+    def __init__(self):
+        # setup merge variables
+        self.next_time_to_call = time.time() # prepare consistent time callback
+        self.timer_interval = 0.25 # every fourth a second, the timer will trigger, used as an example
+        self.thread_in_crit_section = False
+        self.thread_stopped = False
+
+        # prevent timer from executing if we are performing an update with a mutex
+        # https://docs.python.org/3/library/threading.html#threading.Lock.acquire
+        self.disk_mutex = threading.Lock()
+
+        # track RIDs to merge inside a set, this implementation has yet to be setup per page range
+        self.rids_to_merge = set()
+
+        # handlers for epoch based deallocation
+        self.query_queue = {}
+
+        # create background proc thread
+        self.thread = None
+
 
 class Table:
     """
@@ -20,6 +41,7 @@ class Table:
     """
 
     def __init__(self, name, num_columns, key):
+
         self.name = name
         self.key = key  # This is the index of the table key in columns that are sent in
         self.keys = {}  # key-value pairs { key : rid }
@@ -29,27 +51,11 @@ class Table:
         self.next_base_rid = START_RID
         self.next_tail_rid = START_RID
         self.page_range_array = []
+        self.merge_handler = MergeHandler()
 
-        # handlers for deallocation merge
-        self.query_queue = {}
-        
-        # setup merge variables
-        self.next_time_to_call = time.time() # prepare consistent time callback
-        self.timer_interval = 0.25 # every fourth a second, the timer will trigger, used as an example
-        self.thread_in_crit_section = False
-        self.thread_stopped = False
-        self.rids_to_merge = set()
-        # initially, call the thread instantly
-        
-        # prevent timer from executing if we are performing an update with a mutex
-        # https://docs.python.org/3/library/threading.html#threading.Lock.acquire
-        self.disk_mutex = threading.Lock()
-
-        self.thread = self.thread = threading.Timer(self.next_time_to_call - time.time(), self.__merge_callback)
-        
-        
-        # when we start the timer, any class variables assigned after may not be captured
-        self.thread.start()
+        # when we start the timer, any class variables assigned after may not be captured, so do it at the end
+        self.merge_handler.thread = threading.Timer(self.merge_handler.next_time_to_call - time.time(), self.__merge_callback)
+        self.merge_handler.thread.start()
 
 
 
@@ -57,36 +63,36 @@ class Table:
     # https://stackoverflow.com/questions/8600161/executing-periodic-actions-in-python
     def __merge_callback(self): 
 
-        if self.thread_stopped == False:
+        if self.merge_handler.thread_stopped == False:
             
             # force to wait until update is done
             # what if u start an update while merging occurs? This should be okay because we work with copies
-            self.disk_mutex.acquire()
+            self.merge_handler.disk_mutex.acquire()
             
             print(datetime.datetime.now())
             # call _merge
             self.__merge()
             
-            self.disk_mutex.release()
+            self.merge_handler.disk_mutex.release()
             
-            self.thread_in_crit_section = False
-            self.thread = threading.Timer(self.next_time_to_call - time.time(), self.__merge_callback)
-            self.next_time_to_call = self.next_time_to_call + self.timer_interval
-            self.thread.start() 
+            self.merge_handler.thread_in_crit_section = False
+            self.merge_handler.thread = threading.Timer(self.merge_handler.next_time_to_call - time.time(), self.__merge_callback)
+            self.merge_handler.next_time_to_call = self.merge_handler.next_time_to_call + self.merge_handler.timer_interval
+            self.merge_handler.thread.start() 
 
     def shut_down_timer(self): # if constant printing is occurring, this wont properly stop
-        if self.thread_in_crit_section:
+        if self.merge_handler.thread_in_crit_section:
             # kill a certain way
-            self.thread_stopped = True
+            self.merge_handler.thread_stopped = True
             self.thread.join()
         else:
-            self.thread.cancel()
+            self.merge_handler.thread.cancel()
              # use this to halt timer, but does not halt thread as per documentation
 
     # this implementation will first be in mem
     def __merge(self):
-        self.thread_in_crit_section = True
-        if len(self.rids_to_merge) == 0:
+        self.merge_handler.thread_in_crit_section = True
+        if len(self.merge_handler.rids_to_merge) == 0:
             print("no merge necessary, table is up to date")
             # no other action needed here
         else:
@@ -95,8 +101,8 @@ class Table:
             print("merge necessary")
                 
             # deep copy set then clear original to prevent contention
-            rid_set = copy.deepcopy(self.rids_to_merge)
-            self.rids_to_merge.clear()
+            rid_set = copy.deepcopy(self.merge_handler.rids_to_merge)
+            self.merge_handler.rids_to_merge.clear()
             for base_rid in rid_set:
                 
 
@@ -198,7 +204,7 @@ class Table:
     def update_record(self, key, *columns):
 
         # use mutex to prevent contention
-        self.disk_mutex.acquire()
+        self.merge_handler.disk_mutex.acquire()
 
         base_rid = self.keys[key]
         page_range_index = self.page_directory[base_rid][0]
@@ -207,10 +213,10 @@ class Table:
         result = self.page_range_array[page_range_index].update_record(base_rid, tail_rid, columns)
 
         # append to base RID to a set of RIDs to merge, only do so after update is done
-        self.rids_to_merge.add(base_rid)
+        self.merge_handler.rids_to_merge.add(base_rid)
 
 
-        self.disk_mutex.release()
+        self.merge_handler.disk_mutex.release()
 
         return result
 
@@ -218,7 +224,6 @@ class Table:
         if key not in self.keys:
             return False
 
-        self.query_queue[rid] = time.time()        
         rid = self.keys[key]
         page_range_index = self.page_directory[rid][0]
         cur_page_range = self.page_range_array[page_range_index]
