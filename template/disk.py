@@ -3,6 +3,7 @@ from template.page import *
 from template.pageRange import *
 from template.pageSet import *
 
+
 class Disk:
     def __init__(self, table_name):
         self.fn = table_name
@@ -15,9 +16,11 @@ class Disk:
         self.info_fn = TABLE_BASE_PATH + table_name + ".info"  # holds table info
         self.base_meta_fn = TABLE_BASE_PATH + table_name + ".bmeta"  # uses base rids to indicate the start block of a page ranges and base page sets meta data
         self.tail_meta_fn = TABLE_BASE_PATH + table_name + ".tmeta"  # uses tail rids to indicate the start block of a tail page sets meta data
-        self.base_page_directory_fn = TABLE_BASE_PATH + table_name + ".bpd"  # uses rids for indexing page ranges and base page sets internally
-        self.tail_page_directory_fn = TABLE_BASE_PATH + table_name + ".tpd" # uses rids to point to the starting page in a tail page set
-        self.keys_fn = TABLE_BASE_PATH + table_name + ".keys"  # uses rids to index which key relates to each base rid
+        self.keys_fn = TABLE_BASE_PATH + table_name + ".keys"  # uses entry as index
+        self.brid_fn = TABLE_BASE_PATH + table_name + ".brid"  # uses entry as index
+        self.trid_fn = TABLE_BASE_PATH + table_name + ".trid"  # uses entry as index
+        self.base_page_directory_fn = TABLE_BASE_PATH + table_name + ".bpd"  # uses entry as index
+        self.tail_page_directory_fn = TABLE_BASE_PATH + table_name + ".tpd"  # uses entry as index
 
     # returns base page set with associated tail page sets
     def read(self, base_rid):
@@ -25,6 +28,62 @@ class Disk:
 
     def write(self, base_rid):
         pass
+
+
+    ### READ METHODS ###
+    def read_keys(self):
+        data = bytearray(0)
+        with open(self.keys_fn, "rb") as f:
+            while True:
+                bytes = f.read(PAGE_SIZE)
+                if not bytes:
+                    break
+                data.extend(bytes)
+
+        keys = []
+        for i in range(0, len(data), 8):
+            keys.append(int.from_bytes(data[(i * 8):(i * 8) + 8], "little"))
+        return keys
+
+    def read_base_rids(self):
+        data = bytearray(0)
+        with open(self.brid_fn, "rb") as f:
+            while True:
+                bytes = f.read(PAGE_SIZE)
+                if not bytes:
+                    break
+                data.extend(bytes)
+
+        rids = []
+        for i in range(0, len(data), 8):
+            rids.append(int.from_bytes(data[(i * 8):(i * 8) + 8], "little"))
+        return rids
+
+    def read_tail_rids(self):
+        data = bytearray(0)
+        with open(self.trid_fn, "rb") as f:
+            while True:
+                bytes = f.read(PAGE_SIZE)
+                if not bytes:
+                    break
+                data.extend(bytes)
+
+        rids = []
+        for i in range(0, len(data), 8):
+            rids.append(int.from_bytes(data[(i * 8):(i * 8) + 8], "little"))
+        return rids
+
+    def read_base_pd(self, entry_index):
+        f = open(self.base_page_directory_fn, "rb")
+        f.seek(entry_index)
+        data = f.read(8)
+        return int.from_bytes(data, "little")
+
+    def read_tail_pd(self, entry_index):
+        f = open(self.tail_page_directory_fn, "rb")
+        f.seek(entry_index)
+        data = f.read(8)
+        return int.from_bytes(data, "little")
 
     def read_base_page(self, page_range_index, base_page_set_index, base_page_index):
         page = Page()
@@ -74,6 +133,62 @@ class Disk:
         self.next_tail_rid = int.from_bytes(f.read(8), "little")
         f.close()
 
+
+    ### WRITE METHODS ###
+    def write_keys(self):
+        data = bytearray(0)
+        with open(self.keys_fn, "rb") as f:
+            while True:
+                bytes = f.read(PAGE_SIZE)
+                if not bytes:
+                    break
+                data.extend(bytes)
+
+        keys = []
+        for i in range(0, len(data), 8):
+            keys.append(int.from_bytes(data[(i * 8):(i * 8) + 8], "little"))
+        return keys
+
+    def write_base_rids(self):
+        data = bytearray(0)
+        with open(self.brid_fn, "rb") as f:
+            while True:
+                bytes = f.read(PAGE_SIZE)
+                if not bytes:
+                    break
+                data.extend(bytes)
+
+        rids = []
+        for i in range(0, len(data), 8):
+            rids.append(int.from_bytes(data[(i * 8):(i * 8) + 8], "little"))
+        return rids
+
+    def write_tail_rids(self):
+        data = bytearray(0)
+        with open(self.trid_fn, "rb") as f:
+            while True:
+                bytes = f.read(PAGE_SIZE)
+                if not bytes:
+                    break
+                data.extend(bytes)
+
+        rids = []
+        for i in range(0, len(data), 8):
+            rids.append(int.from_bytes(data[(i * 8):(i * 8) + 8], "little"))
+        return rids
+
+    def write_base_pd(self, entry_index):
+        f = open(self.base_page_directory_fn, "rb")
+        f.seek(entry_index)
+        data = f.read(8)
+        return int.from_bytes(data, "little")
+
+    def write_tail_pd(self, entry_index):
+        f = open(self.tail_page_directory_fn, "rb")
+        f.seek(entry_index)
+        data = f.read(8)
+        return int.from_bytes(data, "little")
+
     def write_base_page(self, base_page, page_range_index, base_page_set_index, base_page_index):
         file_offset = ((page_range_index * 16 * self.num_columns) + (
                 base_page_set_index * self.num_columns) + base_page_index) * PAGE_SIZE
@@ -84,7 +199,7 @@ class Disk:
 
     def write_base_page_set(self, base_page_set, page_range_index, base_page_set_index):
         file_offset = ((page_range_index * 16 * self.num_columns) + (
-                    base_page_set_index * self.num_columns)) * PAGE_SIZE
+                base_page_set_index * self.num_columns)) * PAGE_SIZE
         f = open(self.base_fn, "wb")
         f.seek(file_offset)
         for i in range(self.num_columns):
@@ -101,3 +216,8 @@ class Disk:
                 f.write(page_set.pages[j].data)
         f.close()
 
+    def write_tail_page(self, tail_page_set_index, base_page_index):
+        pass
+
+    def write_tail_page_set(self, tail_page_set_index):
+        pass
