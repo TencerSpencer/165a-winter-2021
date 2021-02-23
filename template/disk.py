@@ -148,59 +148,30 @@ class Disk:
 
 
     ### WRITE METHODS ###
-    def write_keys(self):
-        data = bytearray(0)
-        with open(self.keys_fn, "rb") as f:
-            while True:
-                bytes = f.read(PAGE_SIZE)
-                if not bytes:
-                    break
-                data.extend(bytes)
+    def write_keys(self, keys):
+        f = open(self.keys_fn, "wb")
+        for i in range(len(keys)):
+            f.write(int.to_bytes(keys[i], length=8, byteorder="little"))
 
-        keys = []
-        for i in range(0, len(data), 8):
-            keys.append(int.from_bytes(data[(i * 8):(i * 8) + 8], "little"))
-        return keys
+    def write_base_rids(self, rids):
+        f = open(self.brid_fn, "wb")
+        for i in range(len(rids)):
+            f.write(int.to_bytes(rids[i], length=8, byteorder="little"))
 
-    def write_base_rids(self):
-        data = bytearray(0)
-        with open(self.brid_fn, "rb") as f:
-            while True:
-                bytes = f.read(PAGE_SIZE)
-                if not bytes:
-                    break
-                data.extend(bytes)
+    def write_tail_rids(self, rids):
+        f = open(self.trid_fn, "wb")
+        for i in range(len(rids)):
+            f.write(int.to_bytes(rids[i], length=8, byteorder="little"))
 
-        rids = []
-        for i in range(0, len(data), 8):
-            rids.append(int.from_bytes(data[(i * 8):(i * 8) + 8], "little"))
-        return rids
+    def write_base_pd(self, page_set_indexes):
+        f = open(self.trid_fn, "wb")
+        for i in range(len(page_set_indexes)):
+            f.write(int.to_bytes(page_set_indexes[i], length=8, byteorder="little"))
 
-    def write_tail_rids(self):
-        data = bytearray(0)
-        with open(self.trid_fn, "rb") as f:
-            while True:
-                bytes = f.read(PAGE_SIZE)
-                if not bytes:
-                    break
-                data.extend(bytes)
-
-        rids = []
-        for i in range(0, len(data), 8):
-            rids.append(int.from_bytes(data[(i * 8):(i * 8) + 8], "little"))
-        return rids
-
-    def write_base_pd(self, entry_index):
-        f = open(self.base_page_directory_fn, "rb")
-        f.seek(entry_index)
-        data = f.read(8)
-        return int.from_bytes(data, "little")
-
-    def write_tail_pd(self, entry_index):
-        f = open(self.tail_page_directory_fn, "rb")
-        f.seek(entry_index)
-        data = f.read(8)
-        return int.from_bytes(data, "little")
+    def write_tail_pd(self, page_set_indexes):
+        f = open(self.trid_fn, "wb")
+        for i in range(len(page_set_indexes)):
+            f.write(int.to_bytes(page_set_indexes[i], length=8, byteorder="little"))
 
     def write_base_page(self, base_page, page_range_index, base_page_set_index, base_page_index):
         file_offset = ((page_range_index * 16 * self.num_columns) + (
@@ -229,11 +200,25 @@ class Disk:
                 f.write(page_set.pages[j].data)
         f.close()
 
-    def write_tail_page(self, tail_page_set_index, base_page_index):
-        pass
+    def write_tail_page(self, tail_page, data_block_start_index, tail_page_index):
+        file_offset = (data_block_start_index + tail_page_index) * PAGE_SIZE
+        f = open(self.tail_fn, "wb")
+        f.seek(file_offset)
+        f.write(tail_page.data)
+        f.close()
 
-    def write_tail_page_set(self, tail_page_set_index):
-        pass
+    def write_tail_page_set(self, tail_page_set, data_block_start_index):
+        file_offset = data_block_start_index * PAGE_SIZE
+        f = open(self.tail_fn, "wb")
+        f.seek(file_offset)
+        for i in range(self.num_columns):
+            f.write(tail_page_set.pages[i].data)
+        f.close()
 
-    def write_table_info(self, table_name, num_columns, next_base_rid, next_tail_rid):
-        pass
+    def write_table_info(self, num_columns, key_column, next_base_rid, next_tail_rid):
+        f = open(self.info_fn, "wb")
+        f.write(int.to_bytes(num_columns, length=8, byteorder="little"))
+        f.write(int.to_bytes(key_column, length=8, byteorder="little"))
+        f.write(int.to_bytes(next_base_rid, length=8, byteorder="little"))
+        f.write(int.to_bytes(next_tail_rid, length=8, byteorder="little"))
+        f.close()
