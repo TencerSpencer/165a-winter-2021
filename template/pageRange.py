@@ -75,6 +75,27 @@ class PageRange:
 
             return read_data
 
+
+    # TODO: REMOVE THIS FUNCTION LATER
+    def get_record_with_tail(self, base_record_rid, tail_record_rid, query_columns):
+        base_page_set_index = self.base_rids[base_record_rid][0]
+        tail_page_set_index = self.tail_rids[tail_record_rid][0]
+        base_record_offset = self.base_rids[base_record_rid][1]
+        base_page_schema = self.base_schema_encodings[base_record_offset]
+
+        read_data = []
+        # pointer access isn't as expensive, utilize this to alternate page reads
+        for i in range(self.num_columns):
+            if query_columns[i] is not None:
+                if (base_page_schema >> self.num_columns - 1 - i) & 1:
+                    read_data.append(self.__read_record(1, tail_record_rid, tail_page_set_index, i))
+                else:
+                    read_data.append(self.__read_record(0, base_record_rid, base_page_set_index, i))
+            else:
+                read_data.append(None)
+
+        return read_data
+
     def __get_only_base_record(self, rid, page_set_index, query_columns):
         read_data = []
         for i in range(self.num_columns):
@@ -126,6 +147,7 @@ class PageRange:
             new_columns = self.__get_new_columns_for_new_tail(prev_tail_rid, columns)
 
         # write new tail with new schema and previous tails rid
+        
         self.__write_tail_record(tail_rid, new_schema, (0, prev_tail_rid) if prev_tail_rid == (None, None) else (1, prev_tail_rid), new_columns)
 
         return True
