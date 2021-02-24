@@ -6,7 +6,8 @@ class Database():
         self.tables = {}
         self.disks = {}
         self.path = ""
-        
+        self.buffer_pool = Bufferpool()
+
 
     def open(self, path):
         if os.path.isabs(path):
@@ -33,6 +34,8 @@ class Database():
 
         d = Disk(self.path, name, num_columns, key)
         table = d.read_table()
+        table.buffer_pool = self.buffer_pool
+        table.disk = d
         self.disks[name] = d
         self.tables[name] = table
         return table
@@ -56,6 +59,8 @@ class Database():
 
         if disk:  # if disk object associated with table exists, get table from disk
             table = disk.read_table()
+            table.buffer_pool = self.buffer_pool
+            table.disk = disk
             self.tables[name] = table
             return table
 

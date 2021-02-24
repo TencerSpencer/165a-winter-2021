@@ -30,7 +30,15 @@ class Table:
         self.next_base_rid = START_RID
         self.next_tail_rid = START_RID
         self.page_range_array = []
+        self.buffer_pool = None
+        self.disk = None
 
+
+    def __get_record(rid, set_type):
+        # short-hand if,
+        block_start_index = brid_block_start(rid) if set_type == BASE_RID_TYPE else trid_block_start(rid)
+        return this.buffer_pool.get_page_set(self.disk, rid, set_type, block_start_index)
+        
     def __merge(self):
         pass
 
