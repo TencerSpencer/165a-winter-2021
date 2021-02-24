@@ -300,8 +300,13 @@ class PageRange:
         # write data 
         base_page_set = self.base_page_sets[base_page_set_index]
 
+        # clear schema
+        
+
         offset = int(self.base_rids[base_record_rid][1] % RECORDS_PER_PAGE)  # get offset of the individual page, from __read_record
 
         for i in range(self.num_columns):
             base_page_set.pages[i].temp_write(new_data[i], offset)
+
+        return base_record_offset
 

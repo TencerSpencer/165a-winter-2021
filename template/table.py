@@ -15,19 +15,29 @@ class MergeHandler:
     def __init__(self):
         # setup merge variables
         self.next_time_to_call = time.time() # prepare consistent time callback
-        self.timer_interval = 0.5 # every fourth a second, the timer will trigger, used as an example
+        self.timer_interval = .5 # every fourth a second, the timer will trigger, used as an example
         self.thread_in_crit_section = False
         self.thread_stopped = False
 
         # prevent timer from executing if we are performing an update with a mutex
         # https://docs.python.org/3/library/threading.html#threading.Lock.acquire
-        self.disk_mutex = threading.Lock()
+        self.dict_mutex = threading.Lock()
 
-        # track RIDs to merge inside a set, this implementation has yet to be setup per page range
+        # track RIDs to merge inside a dict, this implementation has yet to be setup per page range
+        # {base rid : }
         self.rids_to_merge = {}
 
-        # handlers for epoch based deallocation
-        self.query_queue = {}
+        # handlers for epoch based deallocation [(RID queried : query start time)]
+        self.query_queue = [] 
+
+        # dict of base RID to offset in old copy of base record
+        self.outdated_offsets = {} #{base RID : old offset}
+
+        # handler for deallocation queue (pages to be deallocated)
+        self.dealloc_queue = []
+
+        # list of sequential merge end times, queue emulation
+        self.merge_end = []
 
         # create background proc thread
         self.thread = None
@@ -65,8 +75,6 @@ class Table:
 
         if self.merge_handler.thread_stopped == False:
             
-            print(datetime.datetime.now())
-            
             # call _merge
             self.merge_handler.thread_in_crit_section = True
             self.__merge()
@@ -76,6 +84,7 @@ class Table:
             self.merge_handler.thread.start() 
 
     def shut_down_timer(self): # if constant printing is occurring, this wont properly stop
+        
         if self.merge_handler.thread_in_crit_section:
             # kill a certain way
             self.merge_handler.thread_stopped = True
@@ -87,21 +96,17 @@ class Table:
 
     # this implementation will first be in mem
     def __merge(self):
-        if len(self.merge_handler.rids_to_merge) == 0:
-            print("no merge necessary, table is up to date")
-            # no other action needed here
-        else:
-            # here, we can do length or duration checks
-            # if we're doing a duration check, we need to check how much time has passed
-            print("merge necessary")
-                
-            # deep copy set then clear original to prevent contention
-            # possibly a mutex here too? not sure
+        
+        if len(self.merge_handler.rids_to_merge) != 0:         
+
+            # dictonaries will error out if their size changes during copy, so use a mutex for copying
+            self.merge_handler.dict_mutex.acquire()
             rid_dict = copy.deepcopy(self.merge_handler.rids_to_merge)
             self.merge_handler.rids_to_merge.clear()
-            for base_rid in rid_dict.keys(): # todo: store tail RID here too and use a new get record
+            self.merge_handler.dict_mutex.release()
 
-                
+            for base_rid in rid_dict.keys():
+
                 # todo: need to allocate new space
                 page_range_index = self.page_directory[base_rid][0]
                 cur_page_range = self.page_range_array[page_range_index]
@@ -112,24 +117,34 @@ class Table:
                 
                 new_base_record = data
 
+                # Write new section
+
+
                 # For now, I am just going to write this new base record over the previous i.e.
                 #self.__overwite_previous_base_record(base_rid, new_base_record)
-            
+
+                # next, figure out merge deallocation   
             print("merge complete")
+            self.merge_handler.merge_end.append(time.time())
 
-
-    # THIS FUNCTION WILL BE REMOVED AND IS ONLY USED TO TEST MERGES PURELY IN MEM
-    def __get_record_and_tail(self, base_rid):
-        page_range_index = self.page_directory[base_rid][0]
-        cur_page_range = self.page_range_array[page_range_index]
-        return cur_page_range.get_info_for_merge(base_rid)
+    # deallocate base pages when all active queries started after merge time
+    def __dealloc(self):
+        most_recent_merge = self.merge_handler.merge_end.pop(0)
+        
+        # peek first active query, if start time > most recent merge, deallocate base page
+        if self.query_queue[0][1] > most_recent_merge:
+            dealloc_rid = self.query_queue[0][0]
+            self.merge_handler.dealloc_queue.append()
+        
 
     # THIS FUNCTION WILL BE REMOVED AND IS ONLY USED TO TEST MERGES PURELY IN MEM
     # force schema to be zero
     def __overwite_previous_base_record(self, base_rid, new_data):
         page_range_index = self.page_directory[base_rid][0]
         cur_page_range = self.page_range_array[page_range_index]
-        cur_page_range.overwrite_previous_base_record(base_rid, new_data)
+        old_offset = cur_page_range.overwrite_previous_base_record(base_rid, new_data)
+        self.merge_handler.outdated_offsets[base_rid] = old_offset
+
 
 
     def insert_record(self, *columns):
@@ -151,20 +166,17 @@ class Table:
 
     def update_record(self, key, *columns):
 
-        # use mutex to prevent contention
-        self.merge_handler.disk_mutex.acquire()
-
         base_rid = self.keys[key]
         page_range_index = self.page_directory[base_rid][0]
         tail_rid = self.__get_next_tail_rid()
 
         result = self.page_range_array[page_range_index].update_record(base_rid, tail_rid, columns)
 
+        
+        self.merge_handler.dict_mutex.acquire()
         # append to base RID to a set of RIDs to merge, only do so after update is done, but why does it seem like this is running first?
-        self.merge_handler.rids_to_merge[base_rid] = tail_rid
-
-
-        self.merge_handler.disk_mutex.release()
+        self.merge_handler.rids_to_merge[base_rid] = tail_rid 
+        self.merge_handler.dict_mutex.release()
 
         return result
 
@@ -174,6 +186,10 @@ class Table:
 
         rid = self.keys[key]
         page_range_index = self.page_directory[rid][0]
+
+        # record time when query starts for given RID
+        self.merge_handler.query_queue.append((rid, time.time()))
+
         cur_page_range = self.page_range_array[page_range_index]
         data = cur_page_range.get_record(rid, query_columns)
         return rid, data
