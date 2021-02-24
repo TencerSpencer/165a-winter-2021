@@ -7,7 +7,7 @@ class Bufferpool:
         # eviction policy currently will be least recently used
         
         # here, data = page_set and meta  data
-        self.pages_mem_mapping = {} # {[table_name, rid]} : data, num_columns}
+        self.pages_mem_mapping = {} # {[table_name, set_index, set_type]} : data, num_columns, block_start_index}
         self.dirty_pages = set() # set of [table_name, rid] that are dirty and need to be written to disk before eviction
         self.pinned_pages = {} # dict of [table_name, rid] : pin_num indicating if the current RID is pinned. By default, this is zero
         self.tables = None # dict of {table name : pointer } for easy communication
@@ -17,9 +17,12 @@ class Bufferpool:
         # consistency is important, pop_left to remove, and append to insert to the right
         # if something is re-referenced, we will remove and then append again
 
+    
 
 
     def get_page_set(self, table_name, num_columns, disk, rid, set_type, block_start_index):
+
+
 
         # if data is not in memory
         if self.pages_mem_mapping[table_name, rid] == None:
@@ -34,7 +37,8 @@ class Bufferpool:
             self.lru_enforcement.remove([table_name, rid])
             self.lru_enforcement.append([table_name, rid])
 
-        # ignore pinning/unpinning for now
+        # pin page, for its in use
+        self.pin_page_set(table_name, rid)
         # segment data, then mark it as pinned because it is in use
         page_set, meta_data = self.__unpack_data(data)
         return page_set, meta_data
@@ -103,6 +107,9 @@ class Bufferpool:
     def __is_dirty(self, table_name, rid):
         return table_name, rid in self.dirty_pages 
     
+    # called from table when the ref counter needs to be dec/removed
+    def unpin_page(self):
+        pass
 
 
     @staticmethod
@@ -121,6 +128,7 @@ class Bufferpool:
         # write to the disk
         pass
 
+    # for M3, write a handler that'll check to see if every page is evicted and if so, block until one is free
 
 
 
