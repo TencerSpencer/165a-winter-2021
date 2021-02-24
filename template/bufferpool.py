@@ -58,7 +58,16 @@ class Bufferpool:
         # we must be careful here, due to the fact that dequeue will throw a max size exception. I may need to catch it somewhere
         while (len(self.lru_enforcement) + num_columns + META_DATA_PAGES > MAX_PAGES_IN_BUFFER):
             table_name, rid = self.lru_enforcement.pop_left()
-            self.__evict_page_set(table_name, rid)
+            
+            # page is currently pinned and we cannot evict it
+            if self.pinned_pages[table_name, rid] != None:
+                # page is currently in use and cannot be evicted
+                # add it back to the queue
+                self.lru_enforcement.append(table_name, rid)
+
+            # page can be evicted, remove    
+            else: 
+                self.__evict_page_set(table_name, rid)
 
     # evaluate if page is dirty then remove any traces
     def __evict_page_set(self, table_name, rid):
@@ -95,13 +104,15 @@ class Bufferpool:
         return table_name, rid in self.dirty_pages 
     
 
-    def pack_page_set_and_metadata(self):
 
+    @staticmethod
+    def pack_data(page_set, metadata):
         pass
 
-    def __unpack_data(self, data):
+    
+    @staticmethod
+    def unpack_data(data):
         # last 3 pages are meta data information, do something to figure this out
-
         pass
 
 
