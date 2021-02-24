@@ -23,8 +23,8 @@ class Table:
         self.key = key  # This is the index of the table key in columns that are sent in
         self.num_columns = num_columns
         self.keys = {}  # key-value pairs { key : rid }
-        self.brid_block_start = {}  # { base rid : block start index }
-        self.trid_block_start = {}  # { tail rid : block start index
+        self.brid_block_start = None  # { base rid : block start index }
+        self.trid_block_start = None  # { tail rid : block start index
         self.page_directory = {}  # key-value pairs { rid : (page range index, base page set index) }
         self.index = Index(self)
         self.next_base_rid = START_RID
@@ -33,10 +33,9 @@ class Table:
         self.buffer_pool = None
         self.disk = None
 
-
     def __get_record(self, rid, set_type):
         # short-hand if,
-        block_start_index = brid_block_start(rid) if set_type == BASE_RID_TYPE else trid_block_start(rid)
+        block_start_index = self.brid_block_start[rid] if set_type == BASE_RID_TYPE else self.trid_block_start[rid]
         return self.buffer_pool.get_page_set(self.name, self.num_columns, self.disk, rid, set_type, block_start_index)
 
     def __merge(self):
