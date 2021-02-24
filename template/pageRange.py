@@ -20,16 +20,16 @@ class PageRange:
         self.tail_schema_encodings = {}
         self.tail_indirections = {}  # contains (0/1 based on if base/tail, rid)
         self.tail_timestamps = {}
-        self.__init_base_page_sets()
+        #self.__init_base_page_sets()
 
     # Are all page/tail pages being created upon a page range's creation? If so, I do not think this is the right
     # setup. They are supposed to be made dynamically.
-    def __init_base_page_sets(self):
-        for i in range(PAGE_SETS):
-            self.base_page_sets.append(PageSet(self.num_columns))
+    #def __init_base_page_sets(self):
+        #for i in range(PAGE_SETS):
+            #self.base_page_sets.append(PageSet(self.num_columns))
 
-    def __add_tail_page_set(self):
-        self.tail_page_sets.append(PageSet(self.num_columns))
+    #def __add_tail_page_set(self):
+        #self.tail_page_sets.append(PageSet(self.num_columns))
 
     def add_record(self, rid, columns):
         if self.is_full():

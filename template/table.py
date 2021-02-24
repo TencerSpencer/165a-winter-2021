@@ -54,6 +54,7 @@ class Table:
         self.keys[key] = new_rid
         self.page_directory[new_rid] = (next_free_page_range_index, next_free_base_page_set_index)
 
+
         # continue with inserting the record here
         curr_page_range = self.page_range_array[next_free_page_range_index]
         return curr_page_range.add_record(new_rid, col_list)
@@ -96,6 +97,8 @@ class Table:
         if len(self.page_range_array) == 0:
             # no current page range, build one for starters and append to list
             new_page_range = PageRange(self.num_columns)
+            for i in range(PAGE_SETS):
+                new_page_range.base_page_sets.append(self.buffer_pool.get_new_free_mem_space(self.name, i, self.num_columns))
             self.page_range_array.append(new_page_range)
             # our index will be our only page range
             return 0
