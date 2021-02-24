@@ -34,11 +34,11 @@ class Table:
         self.disk = None
 
 
-    def __get_record(rid, set_type):
+    def __get_record(self, rid, set_type):
         # short-hand if,
         block_start_index = brid_block_start(rid) if set_type == BASE_RID_TYPE else trid_block_start(rid)
-        return this.buffer_pool.get_page_set(self.disk, rid, set_type, block_start_index)
-        
+        return self.buffer_pool.get_page_set(self.name, self.num_columns, self.disk, rid, set_type, block_start_index)
+
     def __merge(self):
         pass
 

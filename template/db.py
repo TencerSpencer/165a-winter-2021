@@ -38,6 +38,7 @@ class Database():
         table.disk = d
         self.disks[name] = d
         self.tables[name] = table
+        table.buffer_pool.tables = self.tables
         return table
 
     """
@@ -62,6 +63,7 @@ class Database():
             table.buffer_pool = self.buffer_pool
             table.disk = disk
             self.tables[name] = table
+            table.buffer_pool.tables = self.tables
             return table
 
         return False
