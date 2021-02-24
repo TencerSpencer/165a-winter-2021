@@ -48,9 +48,9 @@ class Disk:
     def __create_files(self, num_columns, key_column):
         if not os.path.exists(self.table_dir):
             os.makedirs(os.path.join(self.table_dir))  # make Tables directory for db if it doesn't exist
-        b = open(self.tail_fn, "wb+")
+        b = open(self.tail_fn, "wb")
         b.close()
-        c = open(self.info_fn, "wb+")
+        c = open(self.info_fn, "wb")
         c.write(int.to_bytes(num_columns, length=8, byteorder="little"))
         c.write(int.to_bytes(key_column, length=8, byteorder="little"))
         c.write(int.to_bytes(START_RID, length=8, byteorder="little"))
@@ -120,7 +120,7 @@ class Disk:
         return page_set
 
     def write_base_page_set(self, page_set, block_start_index):
-        with open(self.base_fn, "wb") as f:
+        with open(self.base_fn, "ab") as f:
             f.seek(block_start_index * PAGE_SIZE)
             for i in range(self.num_columns + META_DATA_PAGES):
                 f.write(page_set.pages[i])
@@ -135,17 +135,20 @@ class Disk:
         return page_set
 
     def write_tail_page_set(self, page_set, block_start_index):
-        with open(self.tail_fn, "wb") as f:
+        with open(self.tail_fn, "ab") as f:
             f.seek(block_start_index * PAGE_SIZE)
             for i in range(self.num_columns + META_DATA_PAGES):
                 f.write(page_set.pages[i])
 
     def __init_base_fn(self):
-        with open(self.base_fn, "wb+") as f:
+        with open(self.base_fn, "ab") as f:
             for i in range(PAGE_SETS):
                 f.write(bytearray((self.num_columns + META_DATA_PAGES) * PAGE_SIZE))
 
+    def write_key_directory_data(self):
+        pass
+
     def __init_key_directory(self):
-        with open(self.key_directory, "wb+") as f:
+        with open(self.key_directory, "ab") as f:
             for i in range(PAGE_SETS):
                 f.write(bytearray(KEY_DIRECTORY_SET_SIZE))
