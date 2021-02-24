@@ -1,13 +1,20 @@
 from template.table import Table
+from template.disk import *
 
 class Database():
-
     def __init__(self):
         self.tables = {}
-        pass
+        self.disks = {}
+        self.path = ""
 
     def open(self, path):
-        pass
+        if os.path.isabs(path):
+            self.path = path
+        else:
+            self.path = os.path.join(os.path.dirname(__file__), path)
+
+        self.disks = Disk.get_all_disks(self.path)
+
 
     def close(self):
         pass
@@ -19,7 +26,13 @@ class Database():
     :param key: int             #Index of table key in columns
     """
     def create_table(self, name, num_columns, key):
-        table = Table(name, num_columns, key)
+        table = self.tables.get(name)
+        if table:  # if table already exists
+            return table
+
+        d = Disk(self.path, name, num_columns, key)
+        table = d.read_table()
+        self.disks[name] = d
         self.tables[name] = table
         return table
 
@@ -34,5 +47,17 @@ class Database():
     """
     # Returns table with the passed name
     """
-    def get_table(self, name): 
-        return self.tables.get(name)
+    def get_table(self, name):
+        disk = self.disks.get(name)
+        table = self.tables.get(name)
+        if table:  # if tables is already in self.tables
+            return table
+
+        if disk:  # if disk object associated with table exists, get table from disk
+            table = disk.read_table()
+            self.tables[name] = table
+            return table
+
+        return False
+
+
