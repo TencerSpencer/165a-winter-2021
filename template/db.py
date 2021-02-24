@@ -6,6 +6,7 @@ class Database():
         self.tables = {}
         self.disks = {}
         self.path = ""
+        
 
     def open(self, path):
         if os.path.isabs(path):
