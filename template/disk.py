@@ -111,16 +111,51 @@ class Disk:
         return keys, base_block_starts, tail_block_starts
 
     def read_base_page_set(self, block_start_index):
-        pass
+        page_set = PageSet(self.num_columns)
+        with open(self.base_fn, "rb") as f:
+            f.seek(block_start_index * PAGE_SIZE)
+            for i in range(self.num_columns):
+                page_set.pages[i] = f.read(PAGE_SIZE)
 
-    def write_base_page_set(self, page_set, block_start_index):
-        pass
+            timestamps = f.read(PAGE_SIZE)
+            schema_endodings = f.read(PAGE_SIZE)
+            indirection = f.read(PAGE_SIZE)
+
+        return page_set, timestamps, schema_endodings, indirection
+
+    def write_base_page_set(self, page_set, timestamps, schema_encoding, indirection, block_start_index):
+        with open(self.base_fn, "wb") as f:
+            f.seek(block_start_index * PAGE_SIZE)
+            for i in range(self.num_columns):
+                f.write(page_set.pages[i])
+
+            f.write(timestamps)
+            f.write(schema_encoding)
+            f.write(indirection)
+
 
     def read_tail_page_set(self, block_start_index):
-        pass
+        page_set = PageSet(self.num_columns)
+        with open(self.tail_fn, "rb") as f:
+            f.seek(block_start_index * PAGE_SIZE)
+            for i in range(self.num_columns):
+                page_set.pages[i] = f.read(PAGE_SIZE)
 
-    def write_tail_page_set(self, page_set, block_start_index):
-        pass
+            timestamps = f.read(PAGE_SIZE)
+            schema_endodings = f.read(PAGE_SIZE)
+            indirection = f.read(PAGE_SIZE)
+
+        return page_set, timestamps, schema_endodings, indirection
+
+    def write_tail_page_set(self, page_set, timestamps, schema_encoding, indirection, block_start_index):
+        with open(self.tail_fn, "wb") as f:
+            f.seek(block_start_index * PAGE_SIZE)
+            for i in range(self.num_columns):
+                f.write(page_set.pages[i])
+
+            f.write(timestamps)
+            f.write(schema_encoding)
+            f.write(indirection)
 
     def __init_base_fn(self):
         with open(self.base_fn, "wb+") as f:
