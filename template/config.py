@@ -1,5 +1,3 @@
-from template.bufferpool import *
-
 START_RID = 0
 PAGE_SETS = 16
 PAGE_SIZE = 4096

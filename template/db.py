@@ -1,6 +1,6 @@
 from template.table import Table
 from template.disk import *
-from template.bufferpool import *
+from template.bufferpool import Bufferpool
 
 class Database():
     def __init__(self):

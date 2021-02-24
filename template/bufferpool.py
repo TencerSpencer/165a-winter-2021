@@ -68,7 +68,7 @@ class Bufferpool:
         # remove entry from dictonary
         self.pages_mem_mapping.pop([table_name, rid])
 
-    # allocate new space
+    # allocate new space for a page_set
     # assume meta data is packed
     def get_new_free_mem_space(self, table_name, rid, num_columns, data):
         self.__ensure_buffer_pool_can_fit_new_data(num_columns)
@@ -76,6 +76,8 @@ class Bufferpool:
         # add data to the bufferpool and LRU queue
         self.pages_mem_mapping[table_name, rid] = data, num_columns
         self.lru_enforcement.append(table_name, rid)
+        
+        self.pin_page_set(table_name, rid)
 
         # also mark table_name, RID as being in use right now
 
