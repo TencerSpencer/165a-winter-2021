@@ -68,14 +68,16 @@ class Disk:
         f.close()
 
     def read_table(self):
-        keys, base_block_start, tail_block_starts = self.__get_key_directory_data()
+        keys, base_block_start, tail_block_starts = self.get_key_directory_data()
         table = Table(self.fn, self.num_columns, self.key_column)
+        table.next_base_rid = self.next_base_rid
+        table.next_tail_rid = self.next_tail_rid
         table.keys = keys
         table.brid_block_start = base_block_start
         table.trid_block_start = tail_block_starts
         return table
 
-    def __get_key_directory_data(self):
+    def get_key_directory_data(self):
         keys = {}
         base_block_starts = {}
         tail_block_starts = {}
@@ -109,6 +111,49 @@ class Disk:
                     break
 
         return keys, base_block_starts, tail_block_starts
+
+    def write_key_directory_data(self, keys, base_block_starts, tail_block_starts):
+        data = bytearray(0)
+        k = keys.keys()
+        brids = keys.values()
+        brid_block_starts = base_block_starts.values()
+        trids = tail_block_starts.keys()
+        trid_block_starts = tail_block_starts.values()
+
+        k_bytes = []
+        brids_bytes = []
+        brid_block_starts_bytes = []
+        trids_bytes = []
+        trid_block_starts_bytes = []
+
+        # convert 64 bit integers into bytes
+        for i in range(len(k)):
+            for byte in int.to_bytes(k[i], length=8, byteorder="little"):
+                k_bytes.append(byte)
+
+            for byte in int.to_bytes(brids[i], length=8, byteorder="little"):
+                brids_bytes.append(byte)
+
+            for byte in int.to_bytes(trids[i], length=8, byteorder="little"):
+                trids_bytes.append(byte)
+
+            for byte in int.to_bytes(brid_block_starts[i], length=8, byteorder="little"):
+                brid_block_starts_bytes.append(byte)
+
+            for byte in int.to_bytes(trid_block_starts[i], length=8, byteorder="little"):
+                trid_block_starts_bytes.append(byte)
+
+        # append bytes to data properly
+        for i in range((len(k_bytes) // 4096) + 1):
+            data.extend(bytearray(k_bytes[(PAGE_SIZE * i):(PAGE_SIZE * i) + PAGE_SIZE]))
+            data.extend(bytearray(brids_bytes[(PAGE_SIZE * i):(PAGE_SIZE * i) + PAGE_SIZE]))
+            data.extend(bytearray(trids_bytes[(PAGE_SIZE * i):(PAGE_SIZE * i) + PAGE_SIZE]))
+            data.extend(bytearray(brid_block_starts_bytes[(PAGE_SIZE * i):(PAGE_SIZE * i) + PAGE_SIZE]))
+            data.extend(bytearray(trid_block_starts_bytes[(PAGE_SIZE * i):(PAGE_SIZE * i) + PAGE_SIZE]))
+
+        # rewrite key directory file with new key directory data
+        with open(self.key_directory, "wb") as f:
+            f.write(data)
 
     def read_base_page_set(self, block_start_index):
         page_set = PageSet(self.num_columns + META_DATA_PAGES)
@@ -144,9 +189,6 @@ class Disk:
         with open(self.base_fn, "ab") as f:
             for i in range(PAGE_SETS):
                 f.write(bytearray((self.num_columns + META_DATA_PAGES) * PAGE_SIZE))
-
-    def write_key_directory_data(self):
-        pass
 
     def __init_key_directory(self):
         with open(self.key_directory, "ab") as f:
