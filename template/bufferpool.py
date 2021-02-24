@@ -8,32 +8,33 @@ class Bufferpool:
         
         # here, data = page_set and meta  data
         self.pages_mem_mapping = {} # {[table_name, rid]} : data, num_columns}
-        self.num_pages_in_mem = 0 # whenever we load in a page, increment this, whenever we unload a page, decrement this
-        self.dirty_pages = set() # set of rids that are dirty and need to be written to disk before eviction
-        self.pinned_pages = {} # dict of rid : pin_num indicating if the current RID is pinned. By default, this is zero
+        self.dirty_pages = set() # set of [table_name, rid] that are dirty and need to be written to disk before eviction
+        self.pinned_pages = {} # dict of [table_name, rid] : pin_num indicating if the current RID is pinned. By default, this is zero
         self.tables = None # dict of {table name : pointer } for easy communication
 
         # using a LRU setup, 
-        self.lru_enforcement = deque() # dict of {[table_name, rid] : data_offset}
+        self.lru_enforcement = deque(maxlen=MAX_PAGES_IN_BUFFER) # dequeue of [table_name, rid]
         # consistency is important, pop_left to remove, and append to insert to the right
         # if something is re-referenced, we will remove and then append again
 
-        
 
 
     def get_page_set(self, table_name, num_columns, disk, rid, set_type, block_start_index):
 
+        # if data is not in memory
         if self.pages_mem_mapping[table_name, rid] == None:
-            data, offset = self.__load_page_set(disk, num_columns, set_type, block_start_index)
-            # append datapoint to lru_enforcement
-            # self.lru_enforcement
+            data = self.__load_page_set(disk, num_columns, set_type, block_start_index)
+            # append datapoint to lru_enforcement and add to current page tiles
+            self.lru_enforcement.append([table_name, rid])
+            self.pages_mem_mapping[table_name, rid] = data, num_columns
 
-        
-        else:
-            # load data, segment it
+        else: # pull data from current mem
             data = self.pages_mem_mapping[table_name, rid]
+            # reset its position in lru
+            self.lru_enforcement.remove([table_name, rid])
+            self.lru_enforcement.append([table_name, rid])
 
-        # ignore pinning/unpinning
+        # ignore pinning/unpinning for now
         # segment data, then mark it as pinned because it is in use
         page_set, meta_data = self.__unpack_data(data)
         return page_set, meta_data
@@ -50,51 +51,63 @@ class Bufferpool:
         elif set_type == TAIL_RID_TYPE: # we have a tail to bring in,
             data = disk.read_tail_page_set(block_start_index)
 
-        # TODO: put data into memory and then return, data should also have its metadata properly formatted
+        return data
 
-        page_set, metadata = self.__unpack_page_set_and_metadata(data)
-
-        pass # should return this tuple, but not sure what else should be done first, should also return an offset
-
+    # kick out least recently used page from queue
     def __ensure_buffer_pool_can_fit_new_data(self, num_columns):
-        pass
-       # while (self.num_pages_in_mem + num_columns + META_DATA_PAGES > MAX_PAGES_IN_BUFFER):
-            # evict a base_page_set and retry
+        # we must be careful here, due to the fact that dequeue will throw a max size exception. I may need to catch it somewhere
+        while (len(self.lru_enforcement) + num_columns + META_DATA_PAGES > MAX_PAGES_IN_BUFFER):
+            table_name, rid = self.lru_enforcement.pop_left()
+            self.__evict_page_set(table_name, rid)
 
-    def __unload_page_set(self):
-        pass
+    # evaluate if page is dirty then remove any traces
+    def __evict_page_set(self, table_name, rid):
+        if self.__is_dirty(table_name, rid):
+            self.__write_to_disk(rid, table_name)
 
+        # remove entry from dictonary
+        self.pages_mem_mapping.pop([table_name, rid])
 
-    def __get_new_free_mem_space(self):
-        pass
+    # allocate new space
+    # assume meta data is packed
+    def get_new_free_mem_space(self, table_name, rid, num_columns, data):
+        self.__ensure_buffer_pool_can_fit_new_data(num_columns)
+        
+        # add data to the bufferpool and LRU queue
+        self.pages_mem_mapping[table_name, rid] = data, num_columns
+        self.lru_enforcement.append(table_name, rid)
+
+        # also mark table_name, RID as being in use right now
+
+    def pin_page_set(self, table_name, rid):
+        # start at zero and build up
+        if self.pinnned_pages[table_name, rid] == None:
+            # add pair with 1 to indicate we just started pinning
+            self.pinned_pages[table_name, rid] = 1
+        else: 
+            # increase the amount of users using the page, for M3 safe keeping
+            self.pinned_pages[table_name, rid] = self.pinned_pages[table_name, rid] + 1
+
+        
+    def __is_dirty(self, table_name, rid):
+        return table_name, rid in self.dirty_pages 
+    
 
     def pack_page_set_and_metadata(self):
+
         pass
 
     def __unpack_data(self, data):
+        # last 3 pages are meta data information, do something to figure this out
+
         pass
 
 
-
-    def __is_dirty(self, rid):
-        return rid in self.dirty_pages 
-
-    # called after determing that this rid is to be evicted
-    def __evict_page_set(self, rid):
-        if self.__is_dirty(rid):
-            self.__write_to_disk(rid)
-            pass
-
-        # afterwards, evict page i.e. remove it from anything that it was previously bound to
-
     # To write to disk, pack like how I'm reading it, where last 3 pages are meta data
-    def __write_to_disk(self, rid):
+    def __write_to_disk(self, table_name, rid):
         # write to the disk
         pass
 
-    def pin_page(self, rid):
-        pass
-        
 
 
 
