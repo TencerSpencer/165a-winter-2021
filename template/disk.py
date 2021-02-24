@@ -113,6 +113,12 @@ class Disk:
                 else:
                     break
 
+        if keys[-1]:
+            if keys[-1] == -1: # remove invalid entry
+                keys.pop(-1)
+                base_block_starts.pop(-1)
+                tail_block_starts.pop(-1)
+
         return keys, base_block_starts, tail_block_starts
 
     def write_key_directory_data(self, keys, base_block_starts, tail_block_starts):
