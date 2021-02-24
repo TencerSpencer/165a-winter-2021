@@ -3,6 +3,7 @@ from template.page import *
 from template.pageRange import *
 from template.pageSet import *
 import os
+from template.table import *
 
 
 class Disk:
@@ -69,6 +70,54 @@ class Disk:
         f.close()
 
     def read_table(self):
+        keys, base_block_start, tail_block_starts = self.__get_key_directory_data()
+        table = Table(self.fn, self.num_columns, self.key_column)
+        table.keys = keys
+        table.brid_block_start = base_block_start
+        table.trid_block_start = tail_block_starts
+        return table
+
+    def __get_key_directory_data(self):
+        keys = {}
+        base_block_starts = {}
+        tail_block_starts = {}
+        with open(self.key_directory, "rb") as f:
+            while True:
+                data = f.read(KEY_DIRECTORY_SET_SIZE)
+                if data:
+                    k = []
+                    brids = []
+                    trids = []
+                    brid_block_starts = []
+                    trid_block_starts = []
+                    for i in range(RECORDS_PER_PAGE):
+                        k.append(int.from_bytes(data[(i * 8):(i * 8) + 8], byteorder="little"))
+                        brids.append(int.from_bytes(data[PAGE_SIZE + (i * 8):PAGE_SIZE + (i * 8) + 8], byteorder="little"))
+                        trids.append(int.from_bytes(data[(PAGE_SIZE * 2) + (i * 8):(PAGE_SIZE * 2) + (i * 8) + 8], byteorder="little"))
+                        brid_block_starts.append(int.from_bytes(data[(PAGE_SIZE * 3) + (i * 8):(PAGE_SIZE * 3) + (i * 8) + 8], byteorder="little"))
+                        trid_block_starts.append(int.from_bytes(data[(PAGE_SIZE * 4) + (i * 8):(PAGE_SIZE * 4) + (i * 8) + 8], byteorder="little"))
+
+                    for i in range(len(data) // 8):
+                        keys[k[i]] = brids[i]
+                        base_block_starts[brids[i]] = brid_block_starts[i]
+                        tail_block_starts[trids[i]] = trid_block_starts[i]
+                else:
+                    break
+
+        return keys, base_block_starts, tail_block_starts
+
+
+
+    def read_base_page_set(self, block_start_index):
+        pass
+
+    def write_base_page_set(self, block_start_index):
+        pass
+
+    def read_tail_page_set(self, block_start_index):
+        pass
+
+    def write_tail_page_set(self, block_start_index):
         pass
 
     def __init_base_fn(self):
