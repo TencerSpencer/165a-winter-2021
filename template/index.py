@@ -41,6 +41,7 @@ class Index:
             record = self.table.select_record(key, query_cols)
             self.indices[column_number].insert(record[1][column_number], record[0], False)
         self.indices[column_number].check_and_build_seeds()
+        
     
     """ Checks if the index is built for column "column" """
     def is_index_built(self, column_number):
@@ -101,7 +102,7 @@ class RHash:
         self.tail = None
         self.size = 0 # Keeps track of the number of VALUES, NOT RIDs
         self.last_seed_build_size = 0
-
+        
     def get(self, value):
         # Error checking?
         if self.dictionary.get(value, None) == None:
@@ -135,20 +136,24 @@ class RHash:
             # We want 3 seeds for 100 <= size < 1000
             num_seeds = 1 # Not including the head, tail
             if self.size >= 1000:
-                num_seeds = int(self.size / 1_000)
+                num_seeds = int(self.size / 1_000) 
             # Init seeds
             self.seeds = []
             node = self.head
             interval = int(self.size * 1/(num_seeds+1))
+            
+            #print(interval)
             counter = 0
             while node.next_node != None:
                 if (counter % interval) == 0:
                     self.seeds.append(node)
+                    
                 counter += 1
                 node = node.get_next_node()
             # add the tail
             self.seeds.append(self.tail)
-
+            for seed in self.seeds:
+                print(seed.value)
 
     def __insert_into_empty_dictionary(self, value, rid): 
         new_node = RHashNode(value, rid)
