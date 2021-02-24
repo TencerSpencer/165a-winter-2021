@@ -34,8 +34,6 @@ class Disk:
 
         return disks
 
-
-
     # returns base page set with associated tail page sets
     def read(self, base_rid):
         pass
@@ -92,10 +90,16 @@ class Disk:
                     trid_block_starts = []
                     for i in range(RECORDS_PER_PAGE):
                         k.append(int.from_bytes(data[(i * 8):(i * 8) + 8], byteorder="little"))
-                        brids.append(int.from_bytes(data[PAGE_SIZE + (i * 8):PAGE_SIZE + (i * 8) + 8], byteorder="little"))
-                        trids.append(int.from_bytes(data[(PAGE_SIZE * 2) + (i * 8):(PAGE_SIZE * 2) + (i * 8) + 8], byteorder="little"))
-                        brid_block_starts.append(int.from_bytes(data[(PAGE_SIZE * 3) + (i * 8):(PAGE_SIZE * 3) + (i * 8) + 8], byteorder="little"))
-                        trid_block_starts.append(int.from_bytes(data[(PAGE_SIZE * 4) + (i * 8):(PAGE_SIZE * 4) + (i * 8) + 8], byteorder="little"))
+                        brids.append(
+                            int.from_bytes(data[PAGE_SIZE + (i * 8):PAGE_SIZE + (i * 8) + 8], byteorder="little"))
+                        trids.append(int.from_bytes(data[(PAGE_SIZE * 2) + (i * 8):(PAGE_SIZE * 2) + (i * 8) + 8],
+                                                    byteorder="little"))
+                        brid_block_starts.append(
+                            int.from_bytes(data[(PAGE_SIZE * 3) + (i * 8):(PAGE_SIZE * 3) + (i * 8) + 8],
+                                           byteorder="little"))
+                        trid_block_starts.append(
+                            int.from_bytes(data[(PAGE_SIZE * 4) + (i * 8):(PAGE_SIZE * 4) + (i * 8) + 8],
+                                           byteorder="little"))
 
                     for i in range(len(data) // 8):
                         keys[k[i]] = brids[i]
@@ -106,18 +110,16 @@ class Disk:
 
         return keys, base_block_starts, tail_block_starts
 
-
-
     def read_base_page_set(self, block_start_index):
         pass
 
-    def write_base_page_set(self, block_start_index):
+    def write_base_page_set(self, page_set, block_start_index):
         pass
 
     def read_tail_page_set(self, block_start_index):
         pass
 
-    def write_tail_page_set(self, block_start_index):
+    def write_tail_page_set(self, page_set, block_start_index):
         pass
 
     def __init_base_fn(self):
@@ -129,4 +131,3 @@ class Disk:
         with open(self.key_directory, "wb+") as f:
             for i in range(PAGE_SETS):
                 f.write(bytearray(KEY_DIRECTORY_SET_SIZE))
-
