@@ -1,3 +1,6 @@
+import copy
+import threading
+import time
 from template.index import Index
 from template.pageRange import PageRange
 from template.config import *
@@ -69,21 +72,23 @@ class Table:
         self.merge_handler.thread.start()
 
     def __load_record_from_disk(self, rid, set_type):
-        # short-hand if,
         block_start_index = self.brid_block_start[rid] if set_type == BASE_RID_TYPE else self.trid_block_start[rid]
-        data = BUFFER_POOL.get_page_set(self.name, self.num_columns, self.disk, rid, set_type, block_start_index)
+        page_set_index = block_start_index // self.num_columns + META_DATA_PAGES
+        page_range_index = page_set_index // PAGE_SETS
+        data = BUFFER_POOL.get_page_set(self.name, self.num_columns, self.disk, page_range_index, page_set_index, set_type, block_start_index)
+
         if set_type == BASE_RID_TYPE:
             page_set, brids, times, schema, indir, indir_t = Bufferpool.unpack_data(data)
-            if self.page_ranges[block_start_index // 16]:  # check if page range exists
-                self.page_ranges[block_start_index // 16] = PageRange(self.num_columns)
+            if not self.page_ranges[page_range_index]:  # check if page range exists
+                self.page_ranges[page_range_index] = PageRange(self.num_columns)
 
-            self.__add_brids_to_page_directory(brids, block_start_index // 16, block_start_index)
-            self.page_ranges[block_start_index // 16].add_base_page_set_from_disk(page_set, block_start_index, brids,
+            self.__add_brids_to_page_directory(brids, page_range_index, page_set_index)
+            self.page_ranges[page_range_index].add_base_page_set_from_disk(page_set, page_set_index, brids,
                                                                                   times, schema, indir, indir_t)
         else:
             page_set, trids, times, schema, indir, indir_t = Bufferpool.unpack_data(data)
             # this implementation will first be in mem
-            self.page_ranges[block_start_index // 16].add_tail_page_set_from_disk(page_set, block_start_index, trids,
+            self.page_ranges[page_range_index].add_tail_page_set_from_disk(page_set, page_set_index, trids,
                                                                                   times, schema, indir, indir_t)
 
     # for help with background process operation and to ensure timer is consistent
@@ -253,3 +258,7 @@ class Table:
 
         # length returns an index + 1, so subtract one to compensate
         return len(self.page_ranges) - 1
+
+    def __get_meta_data(self, page_set_index):
+        page_range_index = page_set_index // 16
+
