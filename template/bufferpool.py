@@ -2,15 +2,16 @@ from template.config import *
 from collections import deque
 from template.pageSet import *
 
+
 class Bufferpool:
     def __init__(self):
 
         # eviction policy currently will be least recently used
 
         # here, data = page_set and meta  data
-        self.pages_mem_mapping = {}  # {[table_name, set_index, set_type]} : data, num_columns, block_start_index}
+        self.pages_mem_mapping = {}  # {[table_name, page_set_index, set_type]} : data, num_columns, block_start_index}
         self.dirty_pages = set()  # set of [table_name, rid] that are dirty and need to be written to disk before eviction
-        self.pinned_pages = {}  # dict of [table_name, rid] : pin_num indicating if the current RID is pinned. By default, this is zero
+        self.pinned_pages = {}  # dict of [table_name, page_set_index] : pin_num indicating if the current RID is pinned. By default, this is zero
         self.tables = {}  # dict of {table name : pointer } for easy communication
 
         # using a LRU setup, 
@@ -25,6 +26,7 @@ class Bufferpool:
             data = self.__load_page_set(disk, num_columns, set_type, block_start_index)
             # append datapoint to lru_enforcement and add to current page tiles
             self.lru_enforcement.append([table_name, page_set_index])
+            # storing data with meta data packed in bufferpool
             self.pages_mem_mapping[(table_name, page_set_index)] = data, num_columns
 
         else:  # pull data from current mem
@@ -36,8 +38,7 @@ class Bufferpool:
         # pin page, for its in use
         self.pin_page_set(table_name, page_set_index)
         # segment data, then mark it as pinned because it is in use
-        page_set, meta_data = Bufferpool.unpack_data(data)
-        return page_set, meta_data
+        return data
 
     def __load_page_set(self, disk, num_columns, set_type, block_start_index):
         # we must first evict pages before we load them in
@@ -114,10 +115,35 @@ class Bufferpool:
     @staticmethod
     def unpack_data(data):
         # last 3 pages are meta data information, do something to figure this out
-        pass
+        num_columns = len(data.pages) - META_DATA_PAGES
+        page_set = PageSet(num_columns)
+        for i in range(num_columns):
+            page_set.pages[i] = data.pages[i]
+
+        brids = []
+        timestamps = []
+        schema = []
+        indirections = []
+        indirection_types = []
+
+        meta_start = num_columns
+        brids_data = data.pages[meta_start]
+        timestamps_data = data.pages[meta_start + 1]
+        schema_data = data.pages[meta_start + 2]
+        indirections_data = data.pages[meta_start + 3]
+        indirection_types_data = data.pages[meta_start + 4]
+
+        for i in range(RECORDS_PER_PAGE):
+            brids[i] = int.from_bytes(brids_data[(i * 8):(i * 8) + 8], "little")
+            timestamps[i] = int.from_bytes(timestamps_data[(i * 8):(i * 8) + 8], "little")
+            schema[i] = int.from_bytes(schema_data[(i * 8):(i * 8) + 8], "little")
+            indirections[i] = int.from_bytes(indirections_data[(i * 8):(i * 8) + 8], "little")
+            indirection_types[i] = int.from_bytes(indirection_types_data[(i * 8):(i * 8) + 8], "little")
+
+        return page_set, brids, timestamps, schema, indirections, indirection_types
 
     # To write to disk, pack like how I'm reading it, where last 3 pages are meta data
-    def __write_to_disk(self, table_name, rid):
+    def __write_to_disk(self, table_name, page_set_index):
         # write to the disk
         pass
 

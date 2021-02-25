@@ -20,16 +20,38 @@ class PageRange:
         self.tail_schema_encodings = {}
         self.tail_indirections = {}  # contains (0/1 based on if base/tail, rid)
         self.tail_timestamps = {}
-        #self.__init_base_page_sets()
 
-    # Are all page/tail pages being created upon a page range's creation? If so, I do not think this is the right
-    # setup. They are supposed to be made dynamically.
-    #def __init_base_page_sets(self):
-        #for i in range(PAGE_SETS):
-            #self.base_page_sets.append(None)  # create phantom page sets
+    def add_base_page_set(self, page_set, page_set_index, brids, times, schema, indir, indir_t):
+        self.base_page_sets[page_set_index] = page_set
 
-    #def __add_tail_page_set(self):
-        #self.tail_page_sets.append(PageSet(self.num_columns))
+        base_timestamps = {}
+        base_schema_encodings = {}
+        base_indirections = {}
+
+        for i in range(len(brids)):
+            base_timestamps[brids[i]] = times[i]
+            base_schema_encodings[brids[i]] = schema[i]
+            base_indirections[brids[i]] = (indir_t[i], indir[i])
+
+        self.base_timestamps.update(base_timestamps)
+        self.base_schema_encodings.update(base_schema_encodings)
+        self.base_indirections.update(base_indirections)
+
+    def add_tail_page_set(self, page_set, page_set_index, trids, times, schema, indir, indir_t):
+        self.base_page_sets[page_set_index] = page_set
+
+        tail_timestamps = {}
+        tail_schema_encodings = {}
+        tail_indirections = {}
+
+        for i in range(len(trids)):
+            tail_timestamps[trids[i]] = times[i]
+            tail_schema_encodings[trids[i]] = schema[i]
+            tail_indirections[trids[i]] = (indir_t[i], indir[i])
+
+        self.tail_timestamps.update(tail_timestamps)
+        self.tail_schema_encodings.update(tail_schema_encodings)
+        self.tail_indirections.update(tail_indirections)
 
     def add_record(self, rid, columns):
         if self.is_full():
@@ -40,6 +62,8 @@ class PageRange:
         self.num_base_records += 1
 
         return True
+
+
 
     # setup is simplistic due to cumulative pages
     def get_record(self, base_record_rid, query_columns):
