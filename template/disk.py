@@ -121,7 +121,7 @@ class Disk:
                 else:
                     break
 
-        if keys[-1]:
+        if keys.get(-1):
             if keys[-1] == -1: # remove invalid entry
                 keys.pop(-1)
                 base_block_starts.pop(-1)

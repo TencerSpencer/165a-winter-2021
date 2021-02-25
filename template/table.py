@@ -189,7 +189,10 @@ class Table:
         base_rid = self.keys[key]
         page_range_index = self.page_directory[base_rid][0]
         tail_rid = self.__get_next_tail_rid()
-
+        if self.__tail_page_sets_full(page_range_index):
+            tail_page_set_index = len(self.page_ranges[page_range_index].tail_page_sets)
+            self.page_ranges[page_range_index].tail_page_sets[tail_page_set_index] = BUFFER_POOL.get_new_free_mem_space(self.name, page_range_index, tail_page_set_index, self.num_columns, TAIL_RID_TYPE)
+        self.page_ranges[page_range_index].get_next_free_tail_page_set()
         result = self.page_ranges[page_range_index].update_record(base_rid, tail_rid, columns)
 
         self.merge_handler.dict_mutex.acquire()
@@ -198,6 +201,14 @@ class Table:
         self.merge_handler.dict_mutex.release()
 
         return result
+
+    def __tail_page_sets_full(self, page_range_index):
+        if len(self.page_ranges[page_range_index].tail_page_sets) == 0:
+            return True
+
+        return not len(self.page_ranges[page_range_index].tail_page_sets) * RECORDS_PER_PAGE < \
+                   self.page_ranges[page_range_index].num_tail_records
+
 
     def select_record(self, key, query_columns):
         if key not in self.keys:
@@ -237,7 +248,7 @@ class Table:
             # no current page range, build one for starters and append to list
             new_page_range = PageRange(self.num_columns)
             for i in range(PAGE_SETS):
-                new_page_range.base_page_sets[i] = BUFFER_POOL.get_new_free_mem_space(self.name, i, self.num_columns)
+                new_page_range.base_page_sets[i] = BUFFER_POOL.get_new_free_mem_space(self.name, 0, i, self.num_columns, BASE_RID_TYPE)
             self.page_ranges[0] = new_page_range
             # our index will be our only page range
             return 0
@@ -279,3 +290,4 @@ class Table:
                 indir_t[i] = temp[0]
 
         return rids, timestamps, schema, indir, indir_t
+

@@ -202,8 +202,8 @@ class PageRange:
         self.base_timestamps[offset] = int(round(time.time() * 1000))
 
     def __write_tail_record(self, rid, schema, indirection, columns):
-        if self.__tail_page_sets_full():
-            self.tail_page_sets.append(PageSet(self.num_columns))
+        #if self.__tail_page_sets_full():
+            #self.tail_page_sets[len(self.tail_page_sets)] = BUFFER_POOL.get_new_free_mem_space()
 
         tail_page_set_index = int(self.num_tail_records // RECORDS_PER_PAGE)
         tail_page_set = self.tail_page_sets[tail_page_set_index]
@@ -259,12 +259,6 @@ class PageRange:
     def __get_indirection(self, rid):
         base_record_offset = self.base_rids[rid][1]
         return self.base_indirections[base_record_offset]
-
-    def __tail_page_sets_full(self):
-        if len(self.tail_page_sets) == 0:
-            return True
-
-        return not self.tail_page_sets[-1].has_capacity()
 
     # Keep this function public so that table can check if this page range is full or not
     def is_full(self):

@@ -1,6 +1,6 @@
-from template.config import *
+from template.bufferpool_config import *
 from collections import deque
-from template.pageSet import *
+from template.pageSet import PageSet
 
 
 class Bufferpool:
@@ -14,7 +14,7 @@ class Bufferpool:
         self.pinned_page_sets = {}  # dict of (table_name, page_range_index, page_set_index, set_type) : pin_num indicating if the current RID is pinned. By default, this is zero
         self.tables = {}  # dict of {table name : pointer } for easy communication
 
-        # using a LRU setup, 
+        # using a LRU setup,
         self.lru_enforcement = deque(maxlen=MAX_PAGES_IN_BUFFER)  # dequeue of [table_name, page_range_index, page_set]
         # consistency is important, pop_left to remove, and append to insert to the right
         # if something is re-referenced, we will remove and then append again
@@ -66,7 +66,7 @@ class Bufferpool:
                 # add it back to the queue
                 self.lru_enforcement.append((table_name, page_range_index, page_set_index))
 
-            # page can be evicted, remove    
+            # page can be evicted, remove
             else:
                 self.__evict_page_set(table_name, page_range_index, page_set_index, set_type)
 
@@ -88,8 +88,8 @@ class Bufferpool:
         # add data to the bufferpool and LRU queue
         self.pages_mem_mapping[(table_name, page_range_index, page_set_index, set_type)] = data, num_columns
         self.lru_enforcement.append((table_name, page_range_index, page_set_index))
-
-        self.pinned_page_sets[(table_name, page_range_index, page_set_index, set_type)] += 1
+        self.pinned_page_sets[(table_name, page_range_index, page_set_index, set_type)] = 1
+        return data
 
         # also mark table_name, page_set_index as being in use right now
 
@@ -107,7 +107,7 @@ class Bufferpool:
 
     # called from table when the ref counter needs to be dec/removed
     def unpin_page_set(self, table_name, page_range_index, page_set_index, set_type):
-    
+
         self.pinned_page_sets[(table_name, page_range_index, page_set_index, set_type)] -= 1
 
         # if the page is no longer in use, remove it from the mapping, in m3 we may decide to keep it
@@ -123,8 +123,8 @@ class Bufferpool:
 
     # allow a table to mark pagesets as dirty
     def mark_as_dirty(self, table_name, page_range_index, page_set_index, set_type):
-        self.dirty_page_sets.add(table_name, page_range_index, page_set_index, set_type)
-        
+        self.dirty_page_sets.add((table_name, page_range_index, page_set_index, set_type))
+
 
     @staticmethod
     def pack_data(page_set, rids, timestamps, schema, indirections, indirection_types):
