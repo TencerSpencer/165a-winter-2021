@@ -70,13 +70,14 @@ class Index:
     def update_value(self, column_number, old_value, new_value, rid):
         if column_number >= self.table.num_columns:
             return
+        # print("Removing Col: " + str(column_number) + " Value: " + str(old_value) + " RID: " + str(rid))
         self.indices[column_number].remove(old_value, rid)
         self.indices[column_number].insert(new_value, rid, True)
 
     def insert_into_index(self, column_number, value, rid):
         if column_number >= self.table.num_columns:
             return
-        self.indices[column_number].insert(value, rid, true)
+        self.indices[column_number].insert(value, rid, True)
 
 class RHashNode:
     def __init__(self, value, rid, prev_node = None, next_node = None):
@@ -147,7 +148,9 @@ class RHash:
                 num_seeds = int(self.size / 1_000) 
             # Init seeds
             self.seeds = []
-            node = self.head
+            node = self.head 
+            if node == None:
+                return
             interval = int(self.size * 1/(num_seeds+1)) + 1
             #print(interval)
             counter = 0
@@ -158,14 +161,15 @@ class RHash:
                 node = node.get_next_node()
             # add the tail
             self.seeds.append(self.tail)
-            for seed in self.seeds:
-                print(seed.value)
+            #for seed in self.seeds:
+            #    print(seed.value)
 
     def __insert_into_empty_dictionary(self, value, rid): 
         new_node = RHashNode(value, rid)
         self.head = new_node
         self.tail = new_node
         self.tail.next_node = None
+        self.head.prev_node = None
         self.dictionary[value] = new_node
 
     def insert(self, value, rid, checkSeeds):
@@ -201,6 +205,8 @@ class RHash:
     def remove(self, value, rid):
         #if self.dictionary.get(value, None) == None:
         #    return
+        # print(self.dictionary)
+        
         if len(self.dictionary[value].rids) == 1:
             self.size -= 1
             # Completely remove this entry
@@ -222,6 +228,7 @@ class RHash:
             self.check_and_build_seeds(False)
         else:
             # just remove the rid from value array
+            # print(self.dictionary[value].rids)
             self.dictionary[value].rids.remove(rid)
 
     def __getClosestNode(self, value):
@@ -267,8 +274,8 @@ class RHash:
 
     def __append(self, value, rid):
         new_node = RHashNode(value,rid)
-        new_node.prev_node = self.tail
         self.tail.next_node = new_node
+        new_node.prev_node = self.tail
         self.tail = new_node
         # print(self.tail.prev_node)
         self.dictionary[value] = new_node

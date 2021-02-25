@@ -53,7 +53,7 @@ class Table:
 
         # continue with inserting the record here
         curr_page_range = self.page_range_array[next_free_page_range_index]
-        return curr_page_range.add_record(new_rid, col_list)
+        return curr_page_range.add_record(new_rid, col_list), new_rid
 
     def update_record(self, key, *columns):
         base_rid = self.keys[key]
@@ -69,14 +69,12 @@ class Table:
         page_range_index = self.page_directory[rid][0]
         cur_page_range = self.page_range_array[page_range_index]
         data = cur_page_range.get_record(rid, query_columns)
-        
         return rid, data
    
     def select_record_using_rid(self, rid, query_columns):
         page_range_index = self.page_directory[rid][0]
         cur_page_range = self.page_range_array[page_range_index]
         data = cur_page_range.get_record(rid, query_columns)
-        print(data)
         return rid, data
 
     def remove_record(self, key):

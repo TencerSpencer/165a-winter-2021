@@ -2,6 +2,7 @@ from template.db import Database
 from template.query import Query
 from template.config import init
 from template.index import *
+import time
 
 from random import choice, randint, sample, seed
 # from colorama import Fore, Back, Style
@@ -14,6 +15,15 @@ query = Query(grades_table)
 
 records = {}
 
+startTime = time.perf_counter()
+
+index = Index(grades_table)
+index.create_index(0)
+index.create_index(1)
+index.create_index(2)
+index.create_index(3)
+index.create_index(4)
+
 seed(3562901)
 
 for i in range(0, 1000):
@@ -23,13 +33,6 @@ for i in range(0, 1000):
     records[key] = [key, randint(0, 20), randint(0, 20), randint(0, 20), randint(0, 20)]
     query.insert(*records[key])
     print('inserted', records[key])
-
-index = Index(grades_table)
-index.create_index(0)
-index.create_index(1)
-index.create_index(2)
-index.create_index(3)
-index.create_index(4)
 
 for key in records:
     record = query.select(key, 0, [1, 1, 1, 1, 1])[0]
@@ -71,3 +74,5 @@ for c in range(0, grades_table.num_columns):
             print('sum error on [', keys[r[0]], ',', keys[r[1]], ']: ', result, ', correct: ', column_sum)
         else:
             print('sum on [', keys[r[0]], ',', keys[r[1]], ']: ', column_sum)
+
+print("Total elapsed time: " + str(time.perf_counter() - startTime))

@@ -30,7 +30,14 @@ class Query:
     """
 
     def insert(self, *columns):
-        return self.table.insert_record(*columns)
+        status, rid = self.table.insert_record(*columns)
+        if status and self.table.index != None:
+            for i in range(len(columns)):
+                if self.table.index.is_index_built(i):
+                    self.table.index.insert_into_index(i, columns[i], rid)
+        else:
+            return status
+
 
     """
     # Read a record with specified key
@@ -51,14 +58,14 @@ class Query:
                 self.table.index.create_index(column)
             rids = self.table.index.locate(column, key) 
             for rid in rids:
-                data.append(self.table.select_record_using_rid(rid, query_columns))
+                record = self.table.select_record_using_rid(rid, query_columns)
+                data.append(Record(record[0], record[1][self.table.key], record[1]))
             
         else:
             data = self.table.select_record(key, query_columns)
             if data:
                 # print([data[1]])
                 records = [Record(data[0], key, data[1])]
-                
                 return records
                 # return [data[1]]
         return data
