@@ -25,15 +25,15 @@ class Bufferpool:
         if self.pages_mem_mapping[(table_name, page_range_index, page_set_index, set_type)] is None:
             data = self.__load_page_set(disk, num_columns, set_type, block_start_index)
             # append datapoint to lru_enforcement and add to current page tiles
-            self.lru_enforcement.append([table_name, page_set_index])
+            self.lru_enforcement.append((table_name, page_range_index, page_set_index))
             # storing data with meta data packed in bufferpool
             self.pages_mem_mapping[(table_name, page_range_index, page_set_index, set_type)] = data, num_columns
 
         else:  # pull data from current mem
             data = self.pages_mem_mapping[(table_name, page_range_index, page_set_index, set_type)]
             # reset its position in lru
-            self.lru_enforcement.remove([table_name, page_set_index])
-            self.lru_enforcement.append([table_name, page_set_index])
+            self.lru_enforcement.remove((table_name, page_range_index, page_set_index))
+            self.lru_enforcement.append((table_name, page_range_index, page_set_index))
 
         # pin page, for its in use
         self.pin_page_set(table_name, page_range_index, page_set_index, set_type)
