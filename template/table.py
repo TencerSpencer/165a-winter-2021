@@ -254,7 +254,7 @@ class Table:
         # length returns an index + 1, so subtract one to compensate
         return len(self.page_ranges) - 1
 
-    def __get_meta_data(self, page_range_index, page_set_index, set_type):
+    def get_meta_data(self, page_range_index, page_set_index, set_type):
         page_range = self.page_ranges[page_range_index]
         start_offset = RECORDS_PER_PAGE * page_set_index
         timestamps = []

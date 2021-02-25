@@ -15,7 +15,7 @@ class Bufferpool:
         self.tables = {}  # dict of {table name : pointer } for easy communication
 
         # using a LRU setup, 
-        self.lru_enforcement = deque(maxlen=MAX_PAGES_IN_BUFFER)  # dequeue of [table_name, page_set]
+        self.lru_enforcement = deque(maxlen=MAX_PAGES_IN_BUFFER)  # dequeue of [table_name, page_range_index, page_set]
         # consistency is important, pop_left to remove, and append to insert to the right
         # if something is re-referenced, we will remove and then append again
 
@@ -114,6 +114,17 @@ class Bufferpool:
         if self.pinned_page_sets[(table_name, page_range_index, page_set_index, set_type)] == 0:
             self.pinned_page_sets.pop((table_name, page_range_index, page_set_index, set_type))
 
+    # write dirty data to disk
+    def flush_buffer_pool(self):
+        for (table_name, page_range_index, page_set, set_type) in self.dirty_page_sets:
+            meta_data = self.tables[table_name].get_meta_data(page_range_index, page_set, set_type)
+            self.__write_to_disk(table_name, page_range_index, page_set, set_type, meta_data)
+
+
+    # allow a table to mark pagesets as dirty
+    def mark_as_dirty(self, table_name, page_range_index, page_set_index, set_type):
+        self.dirty_page_sets.add(table_name, page_range_index, page_set_index, set_type)
+        
 
     @staticmethod
     def pack_data(page_set, rids, timestamps, schema, indirections, indirection_types):

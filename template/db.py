@@ -23,7 +23,9 @@ class Database():
         for table in tables:
             table.shut_down_timer()
 
-        # write everything else to disk here
+        # write all dirty pages to disk
+        BUFFER_POOL.flush_buffer_pool()
+
         print("database closed")
         pass
 
