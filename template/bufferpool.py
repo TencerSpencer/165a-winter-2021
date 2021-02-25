@@ -11,11 +11,11 @@ class Bufferpool:
         # here, data = page_set and meta  data
         self.pages_mem_mapping = {}  # {(table_name, page_range_index, page_set_index, set_type)} : data, num_columns, block_start_index}
         self.dirty_page_sets = set()  # set of (table_name, page_range_index, page_set_index, set_type) that are dirty and need to be written to disk before eviction
-        self.pinned_pages = {}  # dict of (table_name, page_range_index, page_set_index, set_type) : pin_num indicating if the current RID is pinned. By default, this is zero
+        self.pinned_pages_sets = {}  # dict of (table_name, page_range_index, page_set_index, set_type) : pin_num indicating if the current RID is pinned. By default, this is zero
         self.tables = {}  # dict of {table name : pointer } for easy communication
 
         # using a LRU setup, 
-        self.lru_enforcement = deque(maxlen=MAX_PAGES_IN_BUFFER)  # dequeue of [table_name, page_set]
+        self.lru_enforcement = deque(maxlen=MAX_PAGES_IN_BUFFER)  # dequeue of [table_name, page_range_index, page_set_index]
         # consistency is important, pop_left to remove, and append to insert to the right
         # if something is re-referenced, we will remove and then append again
 
@@ -55,13 +55,14 @@ class Bufferpool:
         return data
 
     # kick out least recently used page from queue
+    # For M2, since we only have one user, we should at most have two pinned pagesets, i.e. the base and tail
     def __ensure_buffer_pool_can_fit_new_data(self, num_columns):
         # we must be careful here, due to the fact that dequeue will throw a max size exception. I may need to catch it somewhere
         while len(self.lru_enforcement) + num_columns + META_DATA_PAGES > MAX_PAGES_IN_BUFFER:
             table_name, page_range_index, page_set_index, set_type = self.lru_enforcement.popleft()
 
             # page is currently pinned and we cannot evict it
-            if self.pages_mem_mapping[(table_name, page_range_index, page_set_index, set_type)] is not None:
+            if self.pinned_pages_sets[(table_name, page_range_index, page_set_index, set_type)] is not None:
                 # page is currently in use and cannot be evicted
                 # add it back to the queue
                 self.lru_enforcement.append((table_name, page_range_index, page_set_index))
@@ -94,19 +95,26 @@ class Bufferpool:
 
     def pin_page_set(self, table_name, page_range_index, page_set_index, set_type):
         # start at zero and build up
-        if self.pages_mem_mapping[(table_name, page_range_index, page_set_index, set_type)] is None:
+        if self.pinned_pages_sets[(table_name, page_range_index, page_set_index, set_type)] is None:
             # add pair with 1 to indicate we just started pinning
-            self.pages_mem_mapping[(table_name, page_range_index, page_set_index, set_type)] = 1
+            self.pinned_pages_sets[(table_name, page_range_index, page_set_index, set_type)] = 1
         else:
             # increase the amount of users using the page, for M3 safe keeping
-            self.pages_mem_mapping[(table_name, page_range_index, page_set_index, set_type)] += 1
+            self.pinned_pages_sets[(table_name, page_range_index, page_set_index, set_type)] += 1
+
+    # called from table when the ref counter needs to be dec/removed, assume that page is already pinned
+    def unpin_page_set(self, table_name, page_range_index, page_set_index, set_type):
+        
+        self.pinned_pages_sets[(table_name, page_range_index, page_set_index, set_type)] -= 1
+
+        # if the page is no longer in use, remove it from the mapping, in m3 we may decide to keep it
+        if self.pinned_pages_sets[(table_name, page_range_index, page_set_index, set_type)] == 0:
+            self.pinned_pages_sets.pop((table_name, page_range_index, page_set_index, set_type))
+
 
     def __is_dirty(self, table_name, page_range_index, page_set_index):
         return table_name, page_range_index, page_set_index in self.dirty_page_sets
 
-    # called from table when the ref counter needs to be dec/removed
-    def unpin_page_set(self):
-        pass
 
 
     @staticmethod
