@@ -238,7 +238,7 @@ class Table:
 
     def remove_record(self, key):
         if key in self.keys:
-            self.keys.pop(key)
+            #self.keys.pop(key)
             return True
 
         return False
