@@ -9,6 +9,7 @@ class Index:
         table.set_index(self)
         self.table = table
         self.indices = [None] *  table.num_columns 
+        self.isBuilt = [False] * table.num_columns
         for i in range(table.num_columns):
             self.indices[i] = RHash()
 
@@ -16,23 +17,21 @@ class Index:
     # returns the location (RID?) of all records with the given value on column "column"
     """
 
-    def locate(self, column, value): #how do we identify which index is for which column?
+    def locate(self, column, value): 
         indexRhash = self.indices[column]
         # indexRhash[value].rids 
-        return indexRhash.get(value)
+        return indexRhash.get(value) #returns all RIDs 
 
     """
     # Returns the RIDs of all records with values in column "column" between "begin" and "end"
     """
 
     def locate_range(self, column, begin, end):
-        indexRhash = self.indices[column]
-        return indexRhash.get_range(begin, end)
+        return self.indices[column].get_range(begin, end)
 
     """
     # optional: Create index on specific column
     """
-
     def create_index(self, column_number):
         query_cols = [None] * self.table.num_columns
         query_cols[column_number] = 1
@@ -40,38 +39,44 @@ class Index:
         for key in self.table.keys:
             record = self.table.select_record(key, query_cols)
             self.indices[column_number].insert(record[1][column_number], record[0], False)
-        self.indices[column_number].check_and_build_seeds()
-        
-    
-    """ Checks if the index is built for column "column" """
+        self.indices[column_number].check_and_build_seeds(False)
+        self.isBuilt[column_number] = True
+
+    """ Checks if the index is built for column 'column' """
     def is_index_built(self, column_number):
         if column_number >= self.table.num_columns:
             return False
-        return self.indices[column_number].getSize != 0
+        return self.isBuilt[column_number]
 
     """
     # optional: Drop index of specific column
     """
     def drop_index(self, column_number):
         self.indices[column_number] = RHash()
+        self.isBuilt[column_number] = False
 
     """Sum over the specified range"""
     def get_sum(self, column, begin, end):
-        return self.get_sum(column, begin, end)
+        return self.indices[column].get_sum(begin, end)
 
     """ Update the rid of the provided value in the provided column"""
-    def update_index(self, column_number, value, old_rid, new_rid):
+    def update_rid(self, column_number, value, old_rid, new_rid):
         if column_number >= self.table.num_columns:
             return
         self.indices[column_number].remove(value, old_rid)
         self.indices[column_number].insert(value, new_rid)
 
+    """ Update the value of the provided column and rid """
+    def update_value(self, column_number, old_value, new_value, rid):
+        if column_number >= self.table.num_columns:
+            return
+        self.indices[column_number].remove(old_value, rid)
+        self.indices[column_number].insert(new_value, rid, True)
+
     def insert_into_index(self, column_number, value, rid):
         if column_number >= self.table.num_columns:
             return
         self.indices[column_number].insert(value, rid, true)
-
-
 
 class RHashNode:
     def __init__(self, value, rid, prev_node = None, next_node = None):
@@ -124,15 +129,18 @@ class RHash:
     def get_sum(self, begin, end):
         sum = 0
         node = self.__getClosestNode(begin)
+        # print(node == self.tail)
         while node != None and node.value <= end:
             sum += node.value * len(node.get_RIDs())
             node = node.next_node
         return sum
 
     """ Rebuilds the seeds if size changes by some amount """
-    def check_and_build_seeds(self):
-        if self.size >= self.last_seed_build_size * SEED_REBUILD_THRESH or self.last_seed_build_size > self.size * SEED_REBUILD_THRESH:
+    def check_and_build_seeds(self, override):
+        # print("Current size: " + str(self.size) + " Last build size: " + str(self.last_seed_build_size))
+        if override or self.size >= self.last_seed_build_size * SEED_REBUILD_THRESH or self.last_seed_build_size > self.size * SEED_REBUILD_THRESH:
             # Rebuild seeds
+            self.last_seed_build_size = self.size
             # We want 3 seeds for 100 <= size < 1000
             num_seeds = 1 # Not including the head, tail
             if self.size >= 1000:
@@ -140,14 +148,12 @@ class RHash:
             # Init seeds
             self.seeds = []
             node = self.head
-            interval = int(self.size * 1/(num_seeds+1))
-            
+            interval = int(self.size * 1/(num_seeds+1)) + 1
             #print(interval)
             counter = 0
             while node.next_node != None:
                 if (counter % interval) == 0:
                     self.seeds.append(node)
-                    
                 counter += 1
                 node = node.get_next_node()
             # add the tail
@@ -189,10 +195,12 @@ class RHash:
             self.__insert_before_item_in_list(closestNode, value, rid)
             # print("Inserted " + str(value) + " into list")
         if checkSeeds:
-            self.check_and_build_seeds()
+            self.check_and_build_seeds(False)
         return
 
     def remove(self, value, rid):
+        #if self.dictionary.get(value, None) == None:
+        #    return
         if len(self.dictionary[value].rids) == 1:
             self.size -= 1
             # Completely remove this entry
@@ -207,8 +215,11 @@ class RHash:
                 nodeToRemove.prev_node.next_node = nodeToRemove.next_node
                 nodeToRemove.next_node.prev_node = nodeToRemove.prev_node
             # self.dictionary.pop(value)
+            if self.dictionary[value] in self.seeds:
+                self.seeds.remove(self.dictionary[value])
+                self.check_and_build_seeds(True)
             del self.dictionary[value]
-            self.check_and_build_seeds()
+            self.check_and_build_seeds(False)
         else:
             # just remove the rid from value array
             self.dictionary[value].rids.remove(rid)
@@ -224,12 +235,15 @@ class RHash:
                 if newDelta < maxDelta:
                     closestNode = node
                     maxDelta = newDelta
+                else:
+                    break
         # Determine whether we need to go up or down
         if closestNode.prev_node != None:
             while closestNode.prev_node.value > value:
                 # Traverse DOWN
                 closestNode = closestNode.prev_node
-        while closestNode.value < value:
+        
+        while closestNode.value < value and closestNode.next_node != None:
             # Traverse UP
             closestNode = closestNode.next_node
         return closestNode
@@ -271,4 +285,3 @@ class RHash:
         while (node != None):
             print(node.rids)
             node = node.next_node
-        

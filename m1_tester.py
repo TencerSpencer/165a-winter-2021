@@ -1,6 +1,7 @@
 from template.db import Database
 from template.query import Query
 from template.config import init
+from template.index import *
 
 from random import choice, randint, sample, seed
 # from colorama import Fore, Back, Style
@@ -22,6 +23,13 @@ for i in range(0, 1000):
     records[key] = [key, randint(0, 20), randint(0, 20), randint(0, 20), randint(0, 20)]
     query.insert(*records[key])
     print('inserted', records[key])
+
+index = Index(grades_table)
+index.create_index(0)
+index.create_index(1)
+index.create_index(2)
+index.create_index(3)
+index.create_index(4)
 
 for key in records:
     record = query.select(key, 0, [1, 1, 1, 1, 1])[0]

@@ -30,8 +30,9 @@ print('inserting 1000')
 for x in range(0,1001): 
     rhash.insert(x,x,False)  #seeds: head = 0, tail = 1000, mid = 500
 
-rhash.check_and_build_seeds()
+rhash.check_and_build_seeds(True)
 rhash.remove(500,500)
+rhash.remove(400,400)
 rhash.remove(1000,1000) #removing tail
 rhash.remove(0,0)
 
@@ -39,8 +40,9 @@ print('\ninserting 2000') #inserting above 1000 entries
 for x in range(0,2001): 
     rhash.insert(x,x,False)
 
-rhash.check_and_build_seeds()
+rhash.check_and_build_seeds(True)
 rhash.remove(500,500) #ISSUE: get 1999 and 2000 as seeds after removal (1999 is not helpful as a seed...)
+rhash.check_and_build_seeds(True)
 
 
 

@@ -24,14 +24,16 @@ class Table:
         self.keys = {}  # key-value pairs { key : rid }
         self.num_columns = num_columns
         self.page_directory = {}  # key-value pairs { rid : (page range index, base page set index) }
-        self.index = Index(self)
         self.next_base_rid = START_RID
         self.next_tail_rid = START_RID
         self.page_range_array = []
         self.index = None
-    
+
     def set_index(self, index):
         self.index = index
+
+    def get_index(self):
+        return self.index
 
     def __merge(self):
         pass
@@ -68,6 +70,13 @@ class Table:
         cur_page_range = self.page_range_array[page_range_index]
         data = cur_page_range.get_record(rid, query_columns)
         
+        return rid, data
+   
+    def select_record_using_rid(self, rid, query_columns):
+        page_range_index = self.page_directory[rid][0]
+        cur_page_range = self.page_range_array[page_range_index]
+        data = cur_page_range.get_record(rid, query_columns)
+        print(data)
         return rid, data
 
     def remove_record(self, key):
