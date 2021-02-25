@@ -127,21 +127,14 @@ class Table:
                 # todo: need to allocate new space
                 page_range_index = self.page_directory[base_rid][0]
                 cur_page_range = self.page_ranges[page_range_index]
-
                 tail_rid = rid_dict[base_rid]
-
-                data = cur_page_range.get_record_with_tail(base_rid, tail_rid, [1,1,1,1,1])
-                
+                data = cur_page_range.get_record_with_specific_tail(base_rid, tail_rid, [1,1,1,1,1])
                 new_base_record = data
-
                 # Write new section
-
-
                 # For now, I am just going to write this new base record over the previous i.e.
                 #self.__overwite_previous_base_record(base_rid, new_base_record)
 
                 # next, figure out merge deallocation   
-            print("merge complete")
             self.merge_handler.merge_end.append(time.time())
 
     # REMOVED - DEALLOC NOT REQUIRED

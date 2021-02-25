@@ -26,9 +26,6 @@ class Database():
         # write all dirty pages to disk
         BUFFER_POOL.flush_buffer_pool()
 
-        print("database closed")
-        pass
-
     """
     # Creates a new table
     :param name: string         #Table name

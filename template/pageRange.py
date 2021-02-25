@@ -69,9 +69,6 @@ class PageRange:
 
         return True
 
-
-
-    # setup is simplistic due to cumulative pages
     def get_record(self, base_record_rid, query_columns):
         base_page_set_index = self.base_rids[base_record_rid][0]
 
@@ -92,6 +89,33 @@ class PageRange:
 
             # filler function that must obtain a tail page handler from a given RID
             tail_record_rid = self.base_indirections[base_record_offset][1]
+
+            # pointer access isn't as expensive, utilize this to alternate page reads
+            for i in range(self.num_columns):
+                if query_columns[i] is not None:
+                    if (base_page_schema >> self.num_columns - 1 - i) & 1:
+                        read_data.append(self.__read_record(1, tail_record_rid, tail_page_set_index, i))
+                    else:
+                        read_data.append(self.__read_record(0, base_record_rid, base_page_set_index, i))
+                else:
+                    read_data.append(None)
+
+            return read_data
+
+    def get_record_with_specific_tail(self, base_record_rid, tail_record_rid, query_columns):
+        base_page_set_index = self.base_rids[base_record_rid][0]
+
+        # get only the base page's info
+        if tail_record_rid is None:
+            return self.__get_only_base_record(base_record_rid, base_page_set_index, query_columns)
+        else:
+            tail_page_set_index = self.tail_rids[tail_record_rid][0]
+
+            read_data = []
+
+            # obtain schema
+            base_record_offset = self.base_rids[base_record_rid][1]
+            base_page_schema = self.base_schema_encodings[base_record_offset]
 
             # pointer access isn't as expensive, utilize this to alternate page reads
             for i in range(self.num_columns):
@@ -176,6 +200,9 @@ class PageRange:
 
     def get_next_free_base_page_set(self):
         return self.num_base_records // RECORDS_PER_PAGE
+
+    def get_next_free_tail_page_set(self):
+        return self.num_tail_records // RECORDS_PER_PAGE
 
     def has_space(self):
         return self.num_base_records < PAGE_SETS * RECORDS_PER_PAGE
