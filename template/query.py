@@ -12,7 +12,6 @@ class Query:
 
     def __init__(self, table):
         self.table = table
-        pass
 
     """
     # internal Method
@@ -31,7 +30,13 @@ class Query:
     """
 
     def insert(self, *columns):
-        return self.table.insert_record(*columns)
+        status, rid = self.table.insert_record(*columns)
+        if status and self.table.index != None:
+            for i in range(len(columns)):
+                if self.table.index.is_index_built(i):
+                    self.table.index.insert_into_index(i, columns[i], rid)
+        else:
+            return status
 
     """
     # Read a record with specified key
@@ -43,11 +48,36 @@ class Query:
     """
 
     def select(self, key, column, query_columns):
-        data = self.table.select_record(key, query_columns)
-        if data:
-            records = [Record(data[0], key, data[1])]
-            return records
+        data = []
+        if column != self.table.key:
+            if self.table.index == None:
+                self.table.index = Index(self.table)
+            # MUST build an index on column
+            if not self.table.index.is_index_built(column):  # if index is not built..
+                self.table.index.create_index(column)
+            rids = self.table.index.locate(column, key)
+            for rid in rids:
+                record = self.table.select_record_using_rid(rid, query_columns)
+                data.append(Record(record[0], record[1][self.table.key], record[1]))
 
+        else:
+            data = self.table.select_record(key, query_columns)
+            if data:
+                # print([data[1]])
+                records = [Record(data[0], key, data[1])]
+                return records
+                # return [data[1]]
+        return data
+
+    """ select_range requires that an index be built on the query column"""
+
+    def select_range(self, begin, end, column, query_columns):
+        data = []
+        if not self.index.is_index_built(column):
+            self.index.create_index(column)
+        RIDs = self.index.locate_range(column, begin, end)
+        for rid in RIDs:
+            data.append(self.select_record_using_rid(rid, query_columns))
         return data
 
     """
@@ -56,8 +86,20 @@ class Query:
     # Returns False if no records exist with given key or if the target record cannot be accessed due to 2PL locking
     """
 
-    def update(self, key, *columns):
-        return self.table.update_record(key, *columns)
+    def update(self, key, *new_columns):
+        rid = self.table.keys.get(key, None)
+        if rid == None:
+            return False
+        # Update the indices, if built
+        old_record = self.table.select_record(key, [1] * self.table.num_columns)[1]
+        if self.table.index != None:
+            for i in range(len(new_columns)):
+                value = new_columns[i]
+                if value == None:
+                    continue
+                if self.table.index.is_index_built(i):
+                    self.table.index.update_value(i, old_record[i], value, rid)
+        return self.table.update_record(key, *new_columns)
 
     """
     :param start_range: int         # Start of the key range to aggregate 
@@ -69,11 +111,13 @@ class Query:
     """
 
     def sum(self, start_range, end_range, aggregate_column_index):
+        """if self.table.index != None and self.table.index.is_index_built(self.table.key):
+            return self.table.index.get_sum(self.table.key, start_range, end_range)"""
         sum = 0
         query_cols = [None] * self.table.num_columns
         query_cols[aggregate_column_index] = 1
         run = False
-        for i in range(start_range, end_range+1):
+        for i in range(start_range, end_range + 1):
             result = self.select(i, 0, query_cols)
             if result:
                 sum += result[0].columns[aggregate_column_index]
@@ -94,6 +138,7 @@ class Query:
     def increment(self, key, column):
         r = self.select(key, self.table.key, [1] * self.table.num_columns)[0]
         if r is not False:
+            r = r.columns
             updated_columns = [None] * self.table.num_columns
             updated_columns[column] = r[column] + 1
             u = self.update(key, *updated_columns)

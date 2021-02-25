@@ -58,7 +58,7 @@ class Table:
         self.brid_to_trid = {}  # { base rid : latest tail rid }
         self.trid_block_start = {}  # { tail rid : block start index }
         self.page_directory = {}  # key-value pairs { rid : (page range index, base page set index) }
-        self.index = Index(self)
+        self.index = None
         self.next_base_rid = START_RID
         self.next_tail_rid = START_RID
         self.page_ranges = {}
@@ -70,9 +70,6 @@ class Table:
 
     def set_index(self, index):
         self.index = index
-
-    def get_index(self):
-        return self.index
 
     def select_record_using_rid(self, rid, query_columns):
         page_range_index = self.page_directory[rid][0]
@@ -192,7 +189,7 @@ class Table:
 
         # update key directory data for base
         self.update_key_directory_data_for_base(new_rid, -1)
-        return curr_page_range.add_record(new_rid, col_list)
+        return curr_page_range.add_record(new_rid, col_list), new_rid
 
     def update_record(self, key, *columns):
         base_rid = self.keys[key]
