@@ -9,8 +9,8 @@ class PageRange:
         self.num_columns = num_columns
         self.num_base_records = 0
         self.num_tail_records = 0
-        self.base_page_sets = []
-        self.tail_page_sets = []
+        self.base_page_sets = {}
+        self.tail_page_sets = {}
         self.next_rid = 0
         self.base_rids = {}  # key-value pairs: { rid : (page set index, offset) }
         self.tail_rids = {}  # key-value pairs: { rid : (page set index, offset) }
@@ -26,7 +26,7 @@ class PageRange:
     # setup. They are supposed to be made dynamically.
     #def __init_base_page_sets(self):
         #for i in range(PAGE_SETS):
-            #self.base_page_sets.append(PageSet(self.num_columns))
+            #self.base_page_sets.append(None)  # create phantom page sets
 
     #def __add_tail_page_set(self):
         #self.tail_page_sets.append(PageSet(self.num_columns))

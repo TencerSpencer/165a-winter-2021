@@ -11,7 +11,7 @@ class Bufferpool:
         self.pages_mem_mapping = {}  # {[table_name, set_index, set_type]} : data, num_columns, block_start_index}
         self.dirty_pages = set()  # set of [table_name, rid] that are dirty and need to be written to disk before eviction
         self.pinned_pages = {}  # dict of [table_name, rid] : pin_num indicating if the current RID is pinned. By default, this is zero
-        self.tables = None  # dict of {table name : pointer } for easy communication
+        self.tables = {}  # dict of {table name : pointer } for easy communication
 
         # using a LRU setup, 
         self.lru_enforcement = deque(maxlen=MAX_PAGES_IN_BUFFER)  # dequeue of [table_name, rid]
@@ -36,7 +36,7 @@ class Bufferpool:
         # pin page, for its in use
         self.pin_page_set(table_name, page_set_index)
         # segment data, then mark it as pinned because it is in use
-        page_set, meta_data = self.__unpack_data(data)
+        page_set, meta_data = Bufferpool.unpack_data(data)
         return page_set, meta_data
 
     def __load_page_set(self, disk, num_columns, set_type, block_start_index):

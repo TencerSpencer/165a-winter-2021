@@ -30,13 +30,12 @@ class Table:
         self.next_base_rid = START_RID
         self.next_tail_rid = START_RID
         self.page_range_array = []
-        self.buffer_pool = None
         self.disk = None
 
     def __get_record(self, rid, set_type):
         # short-hand if,
         block_start_index = self.brid_block_start[rid] if set_type == BASE_RID_TYPE else self.trid_block_start[rid]
-        return self.buffer_pool.get_page_set(self.name, self.num_columns, self.disk, rid, set_type, block_start_index)
+        return BUFFER_POOL.get_page_set(self.name, self.num_columns, self.disk, rid, set_type, block_start_index)
 
     def __merge(self):
         pass
@@ -98,7 +97,7 @@ class Table:
             # no current page range, build one for starters and append to list
             new_page_range = PageRange(self.num_columns)
             for i in range(PAGE_SETS):
-                new_page_range.base_page_sets.append(self.buffer_pool.get_new_free_mem_space(self.name, i, self.num_columns))
+                new_page_range.base_page_sets.append(BUFFER_POOL.get_new_free_mem_space(self.name, i, self.num_columns))
             self.page_range_array.append(new_page_range)
             # our index will be our only page range
             return 0
