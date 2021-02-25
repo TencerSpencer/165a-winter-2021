@@ -84,7 +84,7 @@ class Bufferpool:
     def get_new_free_mem_space(self, table_name, page_range_index, page_set_index, num_columns, set_type):
         self.__ensure_buffer_pool_can_fit_new_data(num_columns)
 
-        data = PageSet(num_columns)
+        data = PageSet(num_columns + META_DATA_PAGES)
         # add data to the bufferpool and LRU queue
         self.pages_mem_mapping[(table_name, page_range_index, page_set_index, set_type)] = data, num_columns
         self.lru_enforcement.append((table_name, page_range_index, page_set_index))
@@ -219,22 +219,27 @@ class Bufferpool:
         indirection_types_data = data.pages[meta_start + 4]
 
         for i in range(RECORDS_PER_PAGE):
-            rids[i] = int.from_bytes(rids_data[(i * 8):(i * 8) + 8], "little")
-            timestamps[i] = int.from_bytes(timestamps_data[(i * 8):(i * 8) + 8], "little")
-            schema[i] = int.from_bytes(schema_data[(i * 8):(i * 8) + 8], "little")
-            indirections[i] = int.from_bytes(indirections_data[(i * 8):(i * 8) + 8], "little")
-            indirection_types[i] = int.from_bytes(indirection_types_data[(i * 8):(i * 8) + 8], "little")
+            rids.append(int.from_bytes(rids_data.data[(i * 8):(i * 8) + 8], "little"))
+            timestamps.append(int.from_bytes(timestamps_data.data[(i * 8):(i * 8) + 8], "little"))
+            schema.append(int.from_bytes(schema_data.data[(i * 8):(i * 8) + 8], "little"))
+            indirections.append(int.from_bytes(indirections_data.data[(i * 8):(i * 8) + 8], "little"))
+            indirection_types.append(int.from_bytes(indirection_types_data.data[(i * 8):(i * 8) + 8], "little"))
 
         return page_set, rids, timestamps, schema, indirections, indirection_types
 
     # To write to disk, pack like how I'm reading it, where last 3 pages are meta data
     def __write_to_disk(self, table_name, page_range_index, page_set_index, set_type, meta):
-        data, num_columns, block_start_index = self.pages_mem_mapping[(table_name, page_range_index, page_set_index, set_type)]
+        data, num_columns = self.pages_mem_mapping[(table_name, page_range_index, page_set_index, set_type)]
         self.__update_meta_data(data, meta)
+        table = self.tables[table_name]
         disk = self.tables[table_name].disk
         if set_type is BASE_RID_TYPE:
+            rid = [k for k, v in table.page_directory.items() if v[0] == page_range_index and v[1] == page_set_index]
+            block_start_index = table.brid_block_start[rid[0]]  # just need a single rid that has the block start index
             disk.write_base_page_set(data, block_start_index)
         else:
+            rid = [k for k, v in table.page_ranges[page_range_index].tail_rids.items() if v[0] == page_set_index]
+            block_start_index = table.trid_block_start[rid[0]]  # just need a single rid that has the block start index
             disk.write_tail_page_set(data, block_start_index)
 
     def __update_meta_data(self, data, meta):
@@ -263,8 +268,8 @@ class Bufferpool:
                 indirection_types_data.append(byte)
 
         meta_start = len(data.pages) - META_DATA_PAGES
-        data.pages[meta_start] = bytearray(rids_data)
-        data.pages[meta_start + 1] = bytearray(timestamps_data)
-        data.pages[meta_start + 2] = bytearray(schema_data)
-        data.pages[meta_start + 3] = bytearray(indirections_data)
-        data.pages[meta_start + 4] = bytearray(indirection_types)
+        data.pages[meta_start].data = bytearray(rids_data)
+        data.pages[meta_start + 1].data = bytearray(timestamps_data)
+        data.pages[meta_start + 2].data = bytearray(schema_data)
+        data.pages[meta_start + 3].data = bytearray(indirections_data)
+        data.pages[meta_start + 4].data = bytearray(indirection_types)

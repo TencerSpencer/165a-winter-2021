@@ -188,7 +188,8 @@ class Table:
         tail_rid = self.__get_next_tail_rid()
         if self.__tail_page_sets_full(page_range_index):
             tail_page_set_index = len(self.page_ranges[page_range_index].tail_page_sets)
-            self.page_ranges[page_range_index].tail_page_sets[tail_page_set_index] = BUFFER_POOL.get_new_free_mem_space(self.name, page_range_index, tail_page_set_index, self.num_columns, TAIL_RID_TYPE)
+            page_set, _, _, _, _, _ = Bufferpool.unpack_data(BUFFER_POOL.get_new_free_mem_space(self.name, page_range_index, tail_page_set_index, self.num_columns, TAIL_RID_TYPE))
+            self.page_ranges[page_range_index].tail_page_sets[tail_page_set_index] = page_set
         tail_page_set_index = self.page_ranges[page_range_index].get_next_free_tail_page_set()
         result = self.page_ranges[page_range_index].update_record(base_rid, tail_rid, columns)
 
@@ -209,9 +210,7 @@ class Table:
         if len(self.page_ranges[page_range_index].tail_page_sets) == 0:
             return True
 
-        return not len(self.page_ranges[page_range_index].tail_page_sets) * RECORDS_PER_PAGE < \
-                   self.page_ranges[page_range_index].num_tail_records
-
+        return not list(self.page_ranges[page_range_index].tail_page_sets.values())[-1].has_capacity()
 
     def select_record(self, key, query_columns):
         if key not in self.keys:
@@ -251,7 +250,8 @@ class Table:
             # no current page range, build one for starters and append to list
             new_page_range = PageRange(self.num_columns)
             for i in range(PAGE_SETS):
-                new_page_range.base_page_sets[i] = BUFFER_POOL.get_new_free_mem_space(self.name, 0, i, self.num_columns, BASE_RID_TYPE)
+                page_set, _, _, _, _, _ = Bufferpool.unpack_data(BUFFER_POOL.get_new_free_mem_space(self.name, 0, i, self.num_columns, BASE_RID_TYPE))
+                new_page_range.base_page_sets[i] = page_set
             self.page_ranges[0] = new_page_range
             # our index will be our only page range
             return 0
@@ -263,6 +263,10 @@ class Table:
 
         # if we reached here, then all our current page ranges are full. As such, build a new one
         new_page_range = PageRange(self.num_columns)
+        for i in range(PAGE_SETS):
+            page_set, _, _, _, _, _ = Bufferpool.unpack_data(
+                BUFFER_POOL.get_new_free_mem_space(self.name, 0, i, self.num_columns, BASE_RID_TYPE))
+            new_page_range.base_page_sets[i] = page_set
         self.page_ranges[len(self.page_ranges)] = new_page_range
 
         # length returns an index + 1, so subtract one to compensate
@@ -286,11 +290,11 @@ class Table:
         else:
             rids = [k for k, v in page_range.tail_rids.items() if v[0] == page_set_index]
             for i in range(len(rids)):
-                timestamps[i] = page_range.tail_timestamps[start_offset + i]
-                schema[i] = page_range.tail_schema_encodings[start_offset + i]
+                timestamps.append(page_range.tail_timestamps[start_offset + i])
+                schema.append(page_range.tail_schema_encodings[start_offset + i])
                 temp = page_range.tail_indirections[start_offset + i]
-                indir[i] = temp[1]
-                indir_t[i] = temp[0]
+                indir.append(temp[1])
+                indir_t.append(temp[0])
 
         return rids, timestamps, schema, indir, indir_t
 

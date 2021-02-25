@@ -212,7 +212,7 @@ class Disk:
         with open(self.base_fn, "ab") as f:
             f.seek(block_start_index * PAGE_SIZE)
             for i in range(self.num_columns + META_DATA_PAGES):
-                f.write(page_set.pages[i])
+                f.write(page_set.pages[i].data)
 
     def read_tail_page_set(self, block_start_index):
         page_set = PageSet(self.num_columns + META_DATA_PAGES)
@@ -227,7 +227,7 @@ class Disk:
         with open(self.tail_fn, "ab") as f:
             f.seek(block_start_index * PAGE_SIZE)
             for i in range(self.num_columns + META_DATA_PAGES):
-                f.write(page_set.pages[i])
+                f.write(page_set.pages[i].data)
 
     def get_next_tail_block(self):
         block_num = self.next_tail_block
