@@ -68,6 +68,18 @@ class Table:
         self.merge_handler.thread = threading.Timer(self.merge_handler.next_time_to_call - time.time(), self.__merge_callback)
         self.merge_handler.thread.start()
 
+    def set_index(self, index):
+        self.index = index
+
+    def get_index(self):
+        return self.index
+
+    def select_record_using_rid(self, rid, query_columns):
+        page_range_index = self.page_directory[rid][0]
+        cur_page_range = self.page_ranges[page_range_index]
+        data = cur_page_range.get_record(rid, query_columns)
+        return rid, data
+
     def __load_record_from_disk(self, rid, set_type):
         block_start_index = self.brid_block_start[rid] if set_type == BASE_RID_TYPE else self.trid_block_start[rid]
         page_set_index = block_start_index // self.num_columns + META_DATA_PAGES
@@ -265,7 +277,7 @@ class Table:
         new_page_range = PageRange(self.num_columns)
         for i in range(PAGE_SETS):
             page_set, _, _, _, _, _ = Bufferpool.unpack_data(
-                BUFFER_POOL.get_new_free_mem_space(self.name, 0, i, self.num_columns, BASE_RID_TYPE))
+                BUFFER_POOL.get_new_free_mem_space(self.name, len(self.page_ranges), i, self.num_columns, BASE_RID_TYPE))
             new_page_range.base_page_sets[i] = page_set
         self.page_ranges[len(self.page_ranges)] = new_page_range
 
