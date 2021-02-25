@@ -42,7 +42,7 @@ class Query:
     """
 
     def select(self, key, column, query_columns):
-        data = None
+        data = []
         if key != self.table.key:
             # MUST build an index on column
             if not self.table.index.is_index_built(column)
@@ -57,6 +57,17 @@ class Query:
 
         return data
 
+    """ select_range requires that an index be built on the query column"""
+    def select_range(self, begin, end, column, query_columns):
+        data = []
+        if not self.index.is_index_built(column):
+            self.index.create_index(column)
+        RIDs = self.index.locate_range(column, begin, end)
+        for rid in RIDs:
+            # Select all values in this rid TODO!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        return data
+
+
     """
     # Update a record with specified key and columns
     # Returns True if update is successful
@@ -64,6 +75,16 @@ class Query:
     """
 
     def update(self, key, *columns):
+        # Update the indices, if built
+        for column in columns:
+            if column == None:
+                continue
+            if self.index.is_index_built(column):
+                # Get the rid from the key
+                rid = self.table.keys.get(key, None)
+                if rid == None:
+                    return False
+                self.index.update_value(column,  rid)
         return self.table.update_record(key, *columns)
 
     """
