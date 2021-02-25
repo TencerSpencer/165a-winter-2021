@@ -78,11 +78,14 @@ class Table:
                 self.page_ranges[block_start_index // 16] = PageRange(self.num_columns)
 
             self.__add_brids_to_page_directory(brids, block_start_index // 16, block_start_index)
-            self.page_ranges[block_start_index // 16].add_base_page_set(page_set, block_start_index, brids, times, schema, indir, indir_t)
+            self.page_ranges[block_start_index // 16].add_base_page_set_from_disk(page_set, block_start_index, brids,
+                                                                                  times, schema, indir, indir_t)
         else:
             page_set, trids, times, schema, indir, indir_t = Bufferpool.unpack_data(data)
-            self.page_ranges[block_start_index // 16].add_tail_page_set(page_set, block_start_index, trids, times,
-                                                                        schema, indir, indir_t)
+            # this implementation will first be in mem
+            self.page_ranges[block_start_index // 16].add_tail_page_set_from_disk(page_set, block_start_index, trids,
+                                                                                  times, schema, indir, indir_t)
+
     # for help with background process operation and to ensure timer is consistent
     # https://stackoverflow.com/questions/8600161/executing-periodic-actions-in-python
     def __merge_callback(self): 
@@ -108,7 +111,7 @@ class Table:
             self.merge_handler.thread.cancel()
             # use this to halt timer, but does not halt thread as per documentation
 
-    # this implementation will first be in mem
+    
     def __merge(self):
         
         if len(self.merge_handler.rids_to_merge) != 0:         
@@ -188,7 +191,7 @@ class Table:
         tail_rid = self.__get_next_tail_rid()
 
         result = self.page_ranges[page_range_index].update_record(base_rid, tail_rid, columns)
-        
+
         self.merge_handler.dict_mutex.acquire()
         # append to base RID to a set of RIDs to merge, only do so after update is done, but why does it seem like this is running first?
         self.merge_handler.rids_to_merge[base_rid] = tail_rid 
