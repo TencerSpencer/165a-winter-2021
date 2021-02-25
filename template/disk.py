@@ -153,7 +153,8 @@ class Disk:
                 trid_block_starts_bytes.append(byte)
 
         # append bytes to data properly
-        key_directory_sets_count = math.ceil((len(k) // RECORDS_PER_PAGE) + 1)
+        key_directory_sets_count = math.ceil((len(k) // RECORDS_PER_PAGE) + 1) if \
+            (len(k) // RECORDS_PER_PAGE) < (len(k) / RECORDS_PER_PAGE) else (len(k) // RECORDS_PER_PAGE)
         for i in range(key_directory_sets_count):
             bytes = bytearray(k_bytes[(PAGE_SIZE * i):(PAGE_SIZE * i) + PAGE_SIZE])
             if len(bytes) != PAGE_SIZE:

@@ -119,6 +119,8 @@ class Bufferpool:
         for table in self.tables.values():
             table.disk.write_key_directory_set(table.keys, table.brid_block_start, table.trid_block_start)
 
+        self.dirty_page_sets = sorted(self.dirty_page_sets)
+
         for (table_name, page_range_index, page_set, set_type) in self.dirty_page_sets:
             table = self.tables[table_name]
             meta_data = table.get_meta_data(page_range_index, page_set, set_type)
@@ -272,4 +274,4 @@ class Bufferpool:
         data.pages[meta_start + 1].data = bytearray(timestamps_data)
         data.pages[meta_start + 2].data = bytearray(schema_data)
         data.pages[meta_start + 3].data = bytearray(indirections_data)
-        data.pages[meta_start + 4].data = bytearray(indirection_types)
+        data.pages[meta_start + 4].data = bytearray(indirection_types_data)

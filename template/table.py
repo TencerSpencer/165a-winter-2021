@@ -280,13 +280,13 @@ class Table:
         indir = []
         indir_t = []
         if set_type == BASE_RID_TYPE:
-            rids = [k for k, v in page_range.base_rids.items() if v == page_set_index]
+            rids = [k for k, v in page_range.base_rids.items() if v[0] == page_set_index]
             for i in range(len(rids)):
-                timestamps[i] = page_range.base_timestamps[start_offset + i]
-                schema[i] = page_range.base_schema_encodings[start_offset + i]
+                timestamps.append(page_range.base_timestamps[start_offset + i])
+                schema.append(page_range.base_schema_encodings[start_offset + i])
                 temp = page_range.base_indirections[start_offset + i]
-                indir[i] = temp[1]
-                indir_t[i] = temp[0]
+                indir.append(temp[1])
+                indir_t.append(temp[0])
         else:
             rids = [k for k, v in page_range.tail_rids.items() if v[0] == page_set_index]
             for i in range(len(rids)):
