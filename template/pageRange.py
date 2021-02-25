@@ -9,8 +9,8 @@ class PageRange:
         self.num_columns = num_columns
         self.num_base_records = 0
         self.num_tail_records = 0
-        self.base_page_sets = []
-        self.tail_page_sets = []
+        self.base_page_sets = {}  # { page set index : page set }
+        self.tail_page_sets = {}  # { page set index : page set }
         self.next_rid = 0
         self.base_rids = {}  # key-value pairs: { rid : (page set index, offset) }
         self.tail_rids = {}  # key-value pairs: { rid : (page set index, offset) }
@@ -20,16 +20,44 @@ class PageRange:
         self.tail_schema_encodings = {}
         self.tail_indirections = {}  # contains (0/1 based on if base/tail, rid)
         self.tail_timestamps = {}
-        self.__init_base_page_sets()
 
-    # Are all page/tail pages being created upon a page range's creation? If so, I do not think this is the right
-    # setup. They are supposed to be made dynamically.
-    def __init_base_page_sets(self):
-        for i in range(PAGE_SETS):
-            self.base_page_sets.append(PageSet(self.num_columns))
+    def add_base_page_set_from_disk(self, page_set, page_set_index, brids, times, schema, indir, indir_t):
+        self.base_page_sets[page_set_index] = page_set
 
-    def __add_tail_page_set(self):
-        self.tail_page_sets.append(PageSet(self.num_columns))
+        base_rids = {}
+        base_timestamps = {}
+        base_schema_encodings = {}
+        base_indirections = {}
+
+        for i in range(len(brids)):
+            base_rids[brids[i]] = (page_set_index, (page_set_index * PAGE_SIZE) + i)
+            base_timestamps[brids[i]] = times[i]
+            base_schema_encodings[brids[i]] = schema[i]
+            base_indirections[brids[i]] = (indir_t[i], indir[i])
+
+        self.base_rids.update(base_rids)
+        self.base_timestamps.update(base_timestamps)
+        self.base_schema_encodings.update(base_schema_encodings)
+        self.base_indirections.update(base_indirections)
+
+    def add_tail_page_set_from_disk(self, page_set, page_set_index, trids, times, schema, indir, indir_t):
+        self.tail_page_sets[page_set_index] = page_set
+
+        tail_rids = {}
+        tail_timestamps = {}
+        tail_schema_encodings = {}
+        tail_indirections = {}
+
+        for i in range(len(trids)):
+            tail_rids[trids[i]] = (page_set_index, (page_set_index * PAGE_SIZE) + i)
+            tail_timestamps[trids[i]] = times[i]
+            tail_schema_encodings[trids[i]] = schema[i]
+            tail_indirections[trids[i]] = (indir_t[i], indir[i])
+
+        self.tail_rids.update(tail_rids)
+        self.tail_timestamps.update(tail_timestamps)
+        self.tail_schema_encodings.update(tail_schema_encodings)
+        self.tail_indirections.update(tail_indirections)
 
     def add_record(self, rid, columns):
         if self.is_full():
@@ -41,7 +69,6 @@ class PageRange:
 
         return True
 
-    # setup is simplistic due to cumulative pages
     def get_record(self, base_record_rid, query_columns):
         base_page_set_index = self.base_rids[base_record_rid][0]
 
@@ -62,6 +89,33 @@ class PageRange:
 
             # filler function that must obtain a tail page handler from a given RID
             tail_record_rid = self.base_indirections[base_record_offset][1]
+
+            # pointer access isn't as expensive, utilize this to alternate page reads
+            for i in range(self.num_columns):
+                if query_columns[i] is not None:
+                    if (base_page_schema >> self.num_columns - 1 - i) & 1:
+                        read_data.append(self.__read_record(1, tail_record_rid, tail_page_set_index, i))
+                    else:
+                        read_data.append(self.__read_record(0, base_record_rid, base_page_set_index, i))
+                else:
+                    read_data.append(None)
+
+            return read_data
+
+    def get_record_with_specific_tail(self, base_record_rid, tail_record_rid, query_columns):
+        base_page_set_index = self.base_rids[base_record_rid][0]
+
+        # get only the base page's info
+        if tail_record_rid is None:
+            return self.__get_only_base_record(base_record_rid, base_page_set_index, query_columns)
+        else:
+            tail_page_set_index = self.tail_rids[tail_record_rid][0]
+
+            read_data = []
+
+            # obtain schema
+            base_record_offset = self.base_rids[base_record_rid][1]
+            base_page_schema = self.base_schema_encodings[base_record_offset]
 
             # pointer access isn't as expensive, utilize this to alternate page reads
             for i in range(self.num_columns):
@@ -147,6 +201,9 @@ class PageRange:
     def get_next_free_base_page_set(self):
         return self.num_base_records // RECORDS_PER_PAGE
 
+    def get_next_free_tail_page_set(self):
+        return self.num_tail_records // RECORDS_PER_PAGE
+
     def has_space(self):
         return self.num_base_records < PAGE_SETS * RECORDS_PER_PAGE
 
@@ -172,8 +229,8 @@ class PageRange:
         self.base_timestamps[offset] = int(round(time.time() * 1000))
 
     def __write_tail_record(self, rid, schema, indirection, columns):
-        if self.__tail_page_sets_full():
-            self.tail_page_sets.append(PageSet(self.num_columns))
+        #if self.__tail_page_sets_full():
+            #self.tail_page_sets[len(self.tail_page_sets)] = BUFFER_POOL.get_new_free_mem_space()
 
         tail_page_set_index = int(self.num_tail_records // RECORDS_PER_PAGE)
         tail_page_set = self.tail_page_sets[tail_page_set_index]
@@ -229,12 +286,6 @@ class PageRange:
     def __get_indirection(self, rid):
         base_record_offset = self.base_rids[rid][1]
         return self.base_indirections[base_record_offset]
-
-    def __tail_page_sets_full(self):
-        if len(self.tail_page_sets) == 0:
-            return True
-
-        return not self.tail_page_sets[-1].has_capacity()
 
     # Keep this function public so that table can check if this page range is full or not
     def is_full(self):

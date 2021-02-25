@@ -1,4 +1,3 @@
-import time
 from template.page import Page
 
 
