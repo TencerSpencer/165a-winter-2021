@@ -42,11 +42,12 @@ class Table:
                 self.page_ranges[block_start_index // 16] = PageRange(self.num_columns)
 
             self.__add_brids_to_page_directory(brids, block_start_index // 16, block_start_index)
-            self.page_ranges[block_start_index // 16].add_base_page_set(page_set, block_start_index, brids, times, schema, indir, indir_t)
+            self.page_ranges[block_start_index // 16].add_base_page_set_from_disk(page_set, block_start_index, brids,
+                                                                                  times, schema, indir, indir_t)
         else:
             page_set, trids, times, schema, indir, indir_t = Bufferpool.unpack_data(data)
-            self.page_ranges[block_start_index // 16].add_tail_page_set(page_set, block_start_index, trids, times,
-                                                                        schema, indir, indir_t)
+            self.page_ranges[block_start_index // 16].add_tail_page_set_from_disk(page_set, block_start_index, trids,
+                                                                                  times, schema, indir, indir_t)
     def __merge(self):
         pass
 

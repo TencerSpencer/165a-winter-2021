@@ -21,34 +21,40 @@ class PageRange:
         self.tail_indirections = {}  # contains (0/1 based on if base/tail, rid)
         self.tail_timestamps = {}
 
-    def add_base_page_set(self, page_set, page_set_index, brids, times, schema, indir, indir_t):
+    def add_base_page_set_from_disk(self, page_set, page_set_index, brids, times, schema, indir, indir_t):
         self.base_page_sets[page_set_index] = page_set
 
+        base_rids = {}
         base_timestamps = {}
         base_schema_encodings = {}
         base_indirections = {}
 
         for i in range(len(brids)):
+            base_rids[brids[i]] = (page_set_index, (page_set_index * PAGE_SIZE) + i)
             base_timestamps[brids[i]] = times[i]
             base_schema_encodings[brids[i]] = schema[i]
             base_indirections[brids[i]] = (indir_t[i], indir[i])
 
+        self.base_rids.update(base_rids)
         self.base_timestamps.update(base_timestamps)
         self.base_schema_encodings.update(base_schema_encodings)
         self.base_indirections.update(base_indirections)
 
-    def add_tail_page_set(self, page_set, page_set_index, trids, times, schema, indir, indir_t):
-        self.base_page_sets[page_set_index] = page_set
+    def add_tail_page_set_from_disk(self, page_set, page_set_index, trids, times, schema, indir, indir_t):
+        self.tail_page_sets[page_set_index] = page_set
 
+        tail_rids = {}
         tail_timestamps = {}
         tail_schema_encodings = {}
         tail_indirections = {}
 
         for i in range(len(trids)):
+            tail_rids[trids[i]] = (page_set_index, (page_set_index * PAGE_SIZE) + i)
             tail_timestamps[trids[i]] = times[i]
             tail_schema_encodings[trids[i]] = schema[i]
             tail_indirections[trids[i]] = (indir_t[i], indir[i])
 
+        self.tail_rids.update(tail_rids)
         self.tail_timestamps.update(tail_timestamps)
         self.tail_schema_encodings.update(tail_schema_encodings)
         self.tail_indirections.update(tail_indirections)
