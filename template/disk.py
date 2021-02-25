@@ -15,6 +15,9 @@ class Disk:
         self.tail_fn = os.path.join(self.table_dir, table_name + ".tail")
         self.info_fn = os.path.join(self.table_dir, table_name + ".info")
         self.key_directory = os.path.join(self.table_dir, table_name + ".kd")
+        self.next_key_directory_block = 0
+        self.next_base_block = 0
+        self.next_tail_block = 0
         if not self.__files_exist():
             self.num_columns = num_columns
             self.key_column = key_column
@@ -57,6 +60,8 @@ class Disk:
         c.write(int.to_bytes(key_column, length=8, byteorder="little"))
         c.write(int.to_bytes(START_RID, length=8, byteorder="little"))
         c.write(int.to_bytes(START_RID, length=8, byteorder="little"))
+        c.write(int.to_bytes(self.next_base_block, length=8, byteorder="little"))
+        c.write(int.to_bytes(self.next_tail_block, length=8, byteorder="little"))
         c.close()
         d = open(self.key_directory, "wb")
         d.close()
@@ -68,6 +73,8 @@ class Disk:
         self.num_records = int.from_bytes(f.read(8), byteorder="little")
         self.next_base_rid = int.from_bytes(f.read(8), byteorder="little")
         self.next_tail_rid = int.from_bytes(f.read(8), byteorder="little")
+        self.next_base_block = int.from_bytes(f.read(8), byteorder="little")
+        self.next_tail_block = int.from_bytes(f.read(8), byteorder="little")
         f.close()
 
     def read_table(self):
@@ -88,6 +95,7 @@ class Disk:
             while True:
                 data = f.read(KEY_DIRECTORY_SET_SIZE)
                 if data:
+                    self.next_key_directory_block += KEY_DIRECTORY_SET_SIZE
                     k = []
                     brids = []
                     trids = []
@@ -121,7 +129,7 @@ class Disk:
 
         return keys, base_block_starts, tail_block_starts
 
-    def write_key_directory_data(self, keys, base_block_starts, tail_block_starts):
+    def write_key_directory_set(self, keys, base_block_starts, tail_block_starts):
         data = bytearray(0)
         k = keys.keys()
         brids = keys.values()

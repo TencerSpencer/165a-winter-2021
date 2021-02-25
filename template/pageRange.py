@@ -9,8 +9,8 @@ class PageRange:
         self.num_columns = num_columns
         self.num_base_records = 0
         self.num_tail_records = 0
-        self.base_page_sets = {}
-        self.tail_page_sets = {}
+        self.base_page_sets = {}  # { page set index : page set }
+        self.tail_page_sets = {}  # { page set index : page set }
         self.next_rid = 0
         self.base_rids = {}  # key-value pairs: { rid : (page set index, offset) }
         self.tail_rids = {}  # key-value pairs: { rid : (page set index, offset) }
