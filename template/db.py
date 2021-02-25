@@ -18,6 +18,13 @@ class Database():
 
 
     def close(self):
+        # when close is called, we must shutdown the timer for each table
+        tables = self.tables.values()
+        for table in tables:
+            table.shut_down_timer()
+
+        # write everything else to disk here
+        print("database closed")
         pass
 
     """

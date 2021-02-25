@@ -1,6 +1,4 @@
-import copy
-import threading
-import time
+import copy, threading, time
 from template.index import Index
 from template.pageRange import PageRange
 from template.config import *

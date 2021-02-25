@@ -11,7 +11,7 @@ class Bufferpool:
         # here, data = page_set and meta  data
         self.pages_mem_mapping = {}  # {(table_name, page_range_index, page_set_index, set_type)} : data, num_columns, block_start_index}
         self.dirty_page_sets = set()  # set of (table_name, page_range_index, page_set_index, set_type) that are dirty and need to be written to disk before eviction
-        self.pinned_pages = {}  # dict of (table_name, page_range_index, page_set_index, set_type) : pin_num indicating if the current RID is pinned. By default, this is zero
+        self.pinned_page_sets = {}  # dict of (table_name, page_range_index, page_set_index, set_type) : pin_num indicating if the current RID is pinned. By default, this is zero
         self.tables = {}  # dict of {table name : pointer } for easy communication
 
         # using a LRU setup, 
@@ -36,7 +36,7 @@ class Bufferpool:
             self.lru_enforcement.append((table_name, page_range_index, page_set_index))
 
         # pin page, for its in use
-        self.pin_page_set(table_name, page_range_index, page_set_index, set_type)
+        self.pinned_page_sets(table_name, page_range_index, page_set_index, set_type)
         # segment data, then mark it as pinned because it is in use
         return data
 
@@ -89,25 +89,30 @@ class Bufferpool:
         self.pages_mem_mapping[(table_name, page_range_index, page_set_index, set_type)] = data, num_columns
         self.lru_enforcement.append((table_name, page_range_index, page_set_index))
 
-        self.pin_page_set(table_name, page_range_index, page_set_index, set_type)
+        self.pinned_page_sets(table_name, page_range_index, page_set_index, set_type)
 
         # also mark table_name, page_set_index as being in use right now
 
     def pin_page_set(self, table_name, page_range_index, page_set_index, set_type):
         # start at zero and build up
-        if self.pages_mem_mapping[(table_name, page_range_index, page_set_index, set_type)] is None:
+        if self.pinned_page_sets[(table_name, page_range_index, page_set_index, set_type)] is None:
             # add pair with 1 to indicate we just started pinning
-            self.pages_mem_mapping[(table_name, page_range_index, page_set_index, set_type)] = 1
+            self.pinned_page_sets[(table_name, page_range_index, page_set_index, set_type)] = 1
         else:
             # increase the amount of users using the page, for M3 safe keeping
-            self.pages_mem_mapping[(table_name, page_range_index, page_set_index, set_type)] += 1
+            self.pinned_page_sets[(table_name, page_range_index, page_set_index, set_type)] += 1
 
     def __is_dirty(self, table_name, page_range_index, page_set_index):
         return table_name, page_range_index, page_set_index in self.dirty_page_sets
 
     # called from table when the ref counter needs to be dec/removed
-    def unpin_page_set(self):
-        pass
+    def unpin_page_set(self, table_name, page_range_index, page_set_index, set_type):
+    
+        self.pinned_page_sets[(table_name, page_range_index, page_set_index, set_type)] -= 1
+
+        # if the page is no longer in use, remove it from the mapping, in m3 we may decide to keep it
+        if self.pinned_page_sets[(table_name, page_range_index, page_set_index, set_type)] == 0:
+            self.pinned_page_sets.pop((table_name, page_range_index, page_set_index, set_type))
 
 
     @staticmethod
