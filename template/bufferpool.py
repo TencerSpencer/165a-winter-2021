@@ -36,7 +36,7 @@ class Bufferpool:
             self.lru_enforcement.append((table_name, page_range_index, page_set_index))
 
         # pin page, for its in use
-        self.pinned_page_sets(table_name, page_range_index, page_set_index, set_type)
+        self.pinned_page_sets[(table_name, page_range_index, page_set_index, set_type)] += 1
         # segment data, then mark it as pinned because it is in use
         return data
 
@@ -89,7 +89,7 @@ class Bufferpool:
         self.pages_mem_mapping[(table_name, page_range_index, page_set_index, set_type)] = data, num_columns
         self.lru_enforcement.append((table_name, page_range_index, page_set_index))
 
-        self.pinned_page_sets(table_name, page_range_index, page_set_index, set_type)
+        self.pinned_page_sets[(table_name, page_range_index, page_set_index, set_type)] += 1
 
         # also mark table_name, page_set_index as being in use right now
 

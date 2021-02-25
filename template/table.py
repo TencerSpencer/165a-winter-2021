@@ -62,9 +62,7 @@ class Table:
         self.next_tail_rid = START_RID
         self.page_ranges = {}
         self.disk = None
-
         self.merge_handler = MergeHandler()
-
         # when we start the timer, any class variables assigned after may not be captured, so do it at the end
         self.merge_handler.thread = threading.Timer(self.merge_handler.next_time_to_call - time.time(), self.__merge_callback)
         self.merge_handler.thread.start()
@@ -91,9 +89,8 @@ class Table:
 
     # for help with background process operation and to ensure timer is consistent
     # https://stackoverflow.com/questions/8600161/executing-periodic-actions-in-python
-    def __merge_callback(self): 
-
-        if self.merge_handler.thread_stopped == False:
+    def __merge_callback(self):
+        if not self.merge_handler.thread_stopped:
             
             # call _merge
             self.merge_handler.thread_in_crit_section = True
@@ -129,7 +126,7 @@ class Table:
 
                 # todo: need to allocate new space
                 page_range_index = self.page_directory[base_rid][0]
-                cur_page_range = self.page_range_array[page_range_index]
+                cur_page_range = self.page_ranges[page_range_index]
 
                 tail_rid = rid_dict[base_rid]
 
@@ -162,7 +159,7 @@ class Table:
     # force schema to be zero
     def __overwite_previous_base_record(self, base_rid, new_data):
         page_range_index = self.page_directory[base_rid][0]
-        cur_page_range = self.page_range_array[page_range_index]
+        cur_page_range = self.page_ranges[page_range_index]
         old_offset = cur_page_range.overwrite_previous_base_record(base_rid, new_data)
         self.merge_handler.outdated_offsets[base_rid] = old_offset
 
