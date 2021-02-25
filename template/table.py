@@ -262,16 +262,25 @@ class Table:
     def __get_meta_data(self, page_range_index, page_set_index, set_type):
         page_range = self.page_ranges[page_range_index]
         start_offset = RECORDS_PER_PAGE * page_set_index
-        rids = [k for k, v in page_range.base_rids.items() if v == page_set_index]
         timestamps = []
         schema = []
         indir = []
         indir_t = []
-        for i in range(len(rids)):
-            timestamps[i] = page_range.timestamps[start_offset + i]
-            schema[i] = page_range.schema_encodings[start_offset + i]
-            temp = page_range.base_indirections[start_offset + i]
-            indir[i] = temp[1]
-            indir_t[i] = temp[0]
+        if set_type == BASE_RID_TYPE:
+            rids = [k for k, v in page_range.base_rids.items() if v == page_set_index]
+            for i in range(len(rids)):
+                timestamps[i] = page_range.base_timestamps[start_offset + i]
+                schema[i] = page_range.base_schema_encodings[start_offset + i]
+                temp = page_range.base_indirections[start_offset + i]
+                indir[i] = temp[1]
+                indir_t[i] = temp[0]
+        else:
+            rids = [k for k, v in page_range.tail_rids.items() if v == page_set_index]
+            for i in range(len(rids)):
+                timestamps[i] = page_range.tail_timestamps[start_offset + i]
+                schema[i] = page_range.tail_schema_encodings[start_offset + i]
+                temp = page_range.tail_indirections[start_offset + i]
+                indir[i] = temp[1]
+                indir_t[i] = temp[0]
 
         return rids, timestamps, schema, indir, indir_t
