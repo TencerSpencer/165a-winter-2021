@@ -1,8 +1,7 @@
-from template.config import *
-from template.page import *
-from template.pageRange import *
-from template.pageSet import *
 import os
+import math
+from template.page import *
+from template.pageSet import *
 from template.table import *
 
 
@@ -36,13 +35,6 @@ class Disk:
                 disks[d] = Disk(db_dir, d, -1, -1)
 
         return disks
-
-    # returns base page set with associated tail page sets
-    def read(self, base_rid):
-        pass
-
-    def write(self, base_rid):
-        pass
 
     def __files_exist(self):
         return os.path.exists(self.base_fn) and os.path.exists(
@@ -131,11 +123,11 @@ class Disk:
 
     def write_key_directory_set(self, keys, base_block_starts, tail_block_starts):
         data = bytearray(0)
-        k = keys.keys()
-        brids = keys.values()
-        brid_block_starts = base_block_starts.values()
-        trids = tail_block_starts.keys()
-        trid_block_starts = tail_block_starts.values()
+        k = list(keys.keys())
+        brids = list(keys.values())
+        brid_block_starts = list(base_block_starts.values())
+        trids = list(tail_block_starts.keys())
+        trid_block_starts = list(tail_block_starts.values())
 
         k_bytes = []
         brids_bytes = []
@@ -161,46 +153,47 @@ class Disk:
                 trid_block_starts_bytes.append(byte)
 
         # append bytes to data properly
-        for i in range((len(k_bytes) // 4096) + 1):
+        key_directory_sets_count = math.ceil((len(k) // RECORDS_PER_PAGE) + 1)
+        for i in range(key_directory_sets_count):
             bytes = bytearray(k_bytes[(PAGE_SIZE * i):(PAGE_SIZE * i) + PAGE_SIZE])
             if len(bytes) != PAGE_SIZE:
                 invalids = bytearray(PAGE_SIZE - len(bytes))
                 for i in range(len(invalids)):
-                    invalids[i] = -1
+                    invalids[i] = 0
                 bytes.extend(invalids)
-            data.extend(bytearray(k_bytes[(PAGE_SIZE * i):(PAGE_SIZE * i) + PAGE_SIZE]))
+            data.extend(bytearray(bytes))
 
             bytes = bytearray(brids_bytes[(PAGE_SIZE * i):(PAGE_SIZE * i) + PAGE_SIZE])
             if len(bytes) != PAGE_SIZE:
                 invalids = bytearray(PAGE_SIZE - len(bytes))
                 for i in range(len(invalids)):
-                    invalids[i] = -1
+                    invalids[i] = 0
                 bytes.extend(invalids)
-            data.extend(bytearray(brids_bytes[(PAGE_SIZE * i):(PAGE_SIZE * i) + PAGE_SIZE]))
+            data.extend(bytearray(bytes))
 
             bytes = bytearray(trids_bytes[(PAGE_SIZE * i):(PAGE_SIZE * i) + PAGE_SIZE])
             if len(bytes) != PAGE_SIZE:
                 invalids = bytearray(PAGE_SIZE - len(bytes))
                 for i in range(len(invalids)):
-                    invalids[i] = -1
+                    invalids[i] = 0
                 bytes.extend(invalids)
-            data.extend(bytearray(trids_bytes[(PAGE_SIZE * i):(PAGE_SIZE * i) + PAGE_SIZE]))
+            data.extend(bytearray(bytes))
 
             bytes = bytearray(brid_block_starts_bytes[(PAGE_SIZE * i):(PAGE_SIZE * i) + PAGE_SIZE])
             if len(bytes) != PAGE_SIZE:
                 invalids = bytearray(PAGE_SIZE - len(bytes))
                 for i in range(len(invalids)):
-                    invalids[i] = -1
+                    invalids[i] = 0
                 bytes.extend(invalids)
-            data.extend(bytearray(brid_block_starts_bytes[(PAGE_SIZE * i):(PAGE_SIZE * i) + PAGE_SIZE]))
+            data.extend(bytearray(bytes))
 
             bytes = bytearray(trid_block_starts_bytes[(PAGE_SIZE * i):(PAGE_SIZE * i) + PAGE_SIZE])
             if len(bytes) != PAGE_SIZE:
                 invalids = bytearray(PAGE_SIZE - len(bytes))
                 for i in range(len(invalids)):
-                    invalids[i] = -1
+                    invalids[i] = 0
                 bytes.extend(invalids)
-            data.extend(bytearray(trid_block_starts_bytes[(PAGE_SIZE * i):(PAGE_SIZE * i) + PAGE_SIZE]))
+            data.extend(bytearray(bytes))
 
         # rewrite key directory file with new key directory data
         with open(self.key_directory, "wb") as f:
@@ -236,12 +229,7 @@ class Disk:
             for i in range(self.num_columns + META_DATA_PAGES):
                 f.write(page_set.pages[i])
 
-    #def __init_base_fn(self):
-        #with open(self.base_fn, "ab") as f:
-            #for i in range(PAGE_SETS):
-                #f.write(bytearray((self.num_columns + META_DATA_PAGES) * PAGE_SIZE))
-
-    #def __init_key_directory(self):
-        #with open(self.key_directory, "ab") as f:
-            #for i in range(PAGE_SETS):
-                #f.write(bytearray(KEY_DIRECTORY_SET_SIZE))
+    def get_next_tail_block(self):
+        block_num = self.next_tail_block
+        self.next_tail_block += 1
+        return block_num

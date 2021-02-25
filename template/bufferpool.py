@@ -116,8 +116,12 @@ class Bufferpool:
 
     # write dirty data to disk
     def flush_buffer_pool(self):
+        for table in self.tables.values():
+            table.disk.write_key_directory_set(table.keys, table.brid_block_start, table.trid_block_start)
+
         for (table_name, page_range_index, page_set, set_type) in self.dirty_page_sets:
-            meta_data = self.tables[table_name].get_meta_data(page_range_index, page_set, set_type)
+            table = self.tables[table_name]
+            meta_data = table.get_meta_data(page_range_index, page_set, set_type)
             self.__write_to_disk(table_name, page_range_index, page_set, set_type, meta_data)
 
 

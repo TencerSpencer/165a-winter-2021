@@ -54,8 +54,9 @@ class Table:
         self.key = key  # This is the index of the table key in columns that are sent in
         self.num_columns = num_columns
         self.keys = {}  # key-value pairs { key : rid }
-        self.brid_block_start = None  # { base rid : block start index }
-        self.trid_block_start = None  # { tail rid : block start index }
+        self.brid_block_start = {}  # { base rid : block start index }
+        self.brid_to_trid = {}  # { base rid : latest tail rid }
+        self.trid_block_start = {}  # { tail rid : block start index }
         self.page_directory = {}  # key-value pairs { rid : (page range index, base page set index) }
         self.index = Index(self)
         self.next_base_rid = START_RID
@@ -101,7 +102,6 @@ class Table:
             self.merge_handler.thread.start() 
 
     def shut_down_timer(self): # if constant printing is occurring, this wont properly stop
-        
         if self.merge_handler.thread_in_crit_section:
             # kill a certain way
             self.merge_handler.thread_stopped = True
@@ -113,9 +113,7 @@ class Table:
 
     
     def __merge(self):
-        
         if len(self.merge_handler.rids_to_merge) != 0:         
-
             # dictonaries will error out if their size changes during copy, so use a mutex for copying
             self.merge_handler.dict_mutex.acquire()
             rid_dict = copy.deepcopy(self.merge_handler.rids_to_merge)
@@ -141,7 +139,7 @@ class Table:
     # deallocate base pages when all active queries started after merge time
     # def __dealloc(self):
     #     most_recent_merge = self.merge_handler.merge_end.pop(0)
-        
+
     #     # peek first active query, if start time > most recent merge, deallocate base page
     #     if self.query_queue[0][1] > most_recent_merge:
     #         dealloc_rid = self.query_queue[0][0]
@@ -176,6 +174,12 @@ class Table:
 
         # continue with inserting the record here
         curr_page_range = self.page_ranges[next_free_page_range_index]
+
+        # mark page set as dirty
+        BUFFER_POOL.mark_as_dirty(self.name, next_free_page_range_index, next_free_base_page_set_index, BASE_RID_TYPE)
+
+        # update key directory data for base
+        self.update_key_directory_data_for_base(new_rid, -1)
         return curr_page_range.add_record(new_rid, col_list)
 
     def update_record(self, key, *columns):
@@ -185,8 +189,14 @@ class Table:
         if self.__tail_page_sets_full(page_range_index):
             tail_page_set_index = len(self.page_ranges[page_range_index].tail_page_sets)
             self.page_ranges[page_range_index].tail_page_sets[tail_page_set_index] = BUFFER_POOL.get_new_free_mem_space(self.name, page_range_index, tail_page_set_index, self.num_columns, TAIL_RID_TYPE)
-        self.page_ranges[page_range_index].get_next_free_tail_page_set()
+        tail_page_set_index = self.page_ranges[page_range_index].get_next_free_tail_page_set()
         result = self.page_ranges[page_range_index].update_record(base_rid, tail_rid, columns)
+
+        # mark tail page set as dirty
+        BUFFER_POOL.mark_as_dirty(self.name, page_range_index, tail_page_set_index, TAIL_RID_TYPE)
+
+        # update key directory data for tail
+        self.update_key_directory_data_for_tail(tail_rid, base_rid)
 
         self.merge_handler.dict_mutex.acquire()
         # append to base RID to a set of RIDs to merge, only do so after update is done, but why does it seem like this is running first?
@@ -274,7 +284,7 @@ class Table:
                 indir[i] = temp[1]
                 indir_t[i] = temp[0]
         else:
-            rids = [k for k, v in page_range.tail_rids.items() if v == page_set_index]
+            rids = [k for k, v in page_range.tail_rids.items() if v[0] == page_set_index]
             for i in range(len(rids)):
                 timestamps[i] = page_range.tail_timestamps[start_offset + i]
                 schema[i] = page_range.tail_schema_encodings[start_offset + i]
@@ -283,4 +293,15 @@ class Table:
                 indir_t[i] = temp[0]
 
         return rids, timestamps, schema, indir, indir_t
+
+    def update_key_directory_data_for_base(self, brid, trid):
+        brid_info = self.page_directory[brid]
+        page_range_index = brid_info[0]
+        base_page_set_index = brid_info[1]
+        self.brid_block_start[brid] = (self.num_columns + META_DATA_PAGES) * (base_page_set_index + (page_range_index // PAGE_SETS))
+        self.brid_to_trid[brid] = trid
+
+    def update_key_directory_data_for_tail(self, trid, brid):
+        self.brid_to_trid[brid] = trid
+        self.trid_block_start[trid] = (self.num_columns + META_DATA_PAGES) * self.disk.get_next_tail_block()
 

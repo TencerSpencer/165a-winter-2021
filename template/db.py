@@ -42,7 +42,7 @@ class Database():
         table.disk = d
         self.disks[name] = d
         self.tables[name] = table
-        BUFFER_POOL.tables[name] = self.tables
+        BUFFER_POOL.tables[name] = self.tables[name]
         return table
 
     """
@@ -66,7 +66,7 @@ class Database():
             table = disk.read_table()
             table.disk = disk
             self.tables[name] = table
-            BUFFER_POOL.tables[name] = self.tables
+            BUFFER_POOL.tables[name] = self.tables[name]
             return table
 
         return False
