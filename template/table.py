@@ -11,11 +11,12 @@ class Record:
         self.key = key
         self.columns = columns
 
+
 class MergeHandler:
     def __init__(self):
         # setup merge variables
-        self.next_time_to_call = time.time() # prepare consistent time callback
-        self.timer_interval = .5 # every fourth a second, the timer will trigger, used as an example
+        self.next_time_to_call = time.time()  # prepare consistent time callback
+        self.timer_interval = .5  # every fourth a second, the timer will trigger, used as an example
         self.thread_in_crit_section = False
         self.thread_stopped = False
 
@@ -28,10 +29,10 @@ class MergeHandler:
         self.rids_to_merge = {}
 
         # handlers for epoch based deallocation [(RID queried : query start time)]
-        self.query_queue = [] 
+        self.query_queue = []
 
         # dict of base RID to offset in old copy of base record
-        self.outdated_offsets = {} #{base RID : old offset}
+        self.outdated_offsets = {}  # {base RID : old offset}
 
         # handler for deallocation queue (pages to be deallocated)
         self.dealloc_queue = []
@@ -41,6 +42,7 @@ class MergeHandler:
 
         # create background proc thread
         self.thread = None
+
 
 class Table:
     """
@@ -65,7 +67,8 @@ class Table:
         self.disk = None
         self.merge_handler = MergeHandler()
         # when we start the timer, any class variables assigned after may not be captured, so do it at the end
-        self.merge_handler.thread = threading.Timer(self.merge_handler.next_time_to_call - time.time(), self.__merge_callback)
+        self.merge_handler.thread = threading.Timer(self.merge_handler.next_time_to_call - time.time(),
+                                                    self.__merge_callback)
         self.merge_handler.thread.start()
 
     def set_index(self, index):
@@ -81,36 +84,37 @@ class Table:
         block_start_index = self.brid_block_start[rid] if set_type == BASE_RID_TYPE else self.trid_block_start[rid]
         page_set_index = block_start_index // (self.num_columns + META_DATA_PAGES)
         page_range_index = page_set_index // PAGE_SETS
-        data = BUFFER_POOL.get_page_set(self.name, self.num_columns, self.disk, page_range_index, page_set_index, set_type, block_start_index)
+        data = BUFFER_POOL.get_page_set(self.name, self.num_columns, self.disk, page_range_index, page_set_index,
+                                        set_type, block_start_index)
 
         if set_type == BASE_RID_TYPE:
             page_set, brids, times, schema, indir, indir_t = Bufferpool.unpack_data(data)
-            if not self.page_ranges[page_range_index]:  # check if page range exists
+            if not self.page_ranges.get(page_range_index):  # check if page range exists
                 self.page_ranges[page_range_index] = PageRange(self.num_columns)
 
-            self.__add_brids_to_page_directory(brids, page_range_index, page_set_index)
+            self.__add_brids_to_page_directory(brids, indir, indir_t, page_range_index, page_set_index)
             self.page_ranges[page_range_index].add_base_page_set_from_disk(page_set, page_set_index, brids,
-                                                                                  times, schema, indir, indir_t)
+                                                                           times, schema, indir, indir_t)
         else:
             page_set, trids, times, schema, indir, indir_t = Bufferpool.unpack_data(data)
             # this implementation will first be in mem
             self.page_ranges[page_range_index].add_tail_page_set_from_disk(page_set, page_set_index, trids,
-                                                                                  times, schema, indir, indir_t)
+                                                                           times, schema, indir, indir_t)
 
     # for help with background process operation and to ensure timer is consistent
     # https://stackoverflow.com/questions/8600161/executing-periodic-actions-in-python
     def __merge_callback(self):
         if not self.merge_handler.thread_stopped:
-            
             # call _merge
             self.merge_handler.thread_in_crit_section = True
             self.__merge()
             self.merge_handler.thread_in_crit_section = False
-            self.merge_handler.thread = threading.Timer(self.merge_handler.next_time_to_call - time.time(), self.__merge_callback)
+            self.merge_handler.thread = threading.Timer(self.merge_handler.next_time_to_call - time.time(),
+                                                        self.__merge_callback)
             self.merge_handler.next_time_to_call = self.merge_handler.next_time_to_call + self.merge_handler.timer_interval
-            self.merge_handler.thread.start() 
+            self.merge_handler.thread.start()
 
-    def shut_down_timer(self): # if constant printing is occurring, this wont properly stop
+    def shut_down_timer(self):  # if constant printing is occurring, this wont properly stop
         if self.merge_handler.thread_in_crit_section:
             # kill a certain way
             self.merge_handler.thread_stopped = True
@@ -120,9 +124,8 @@ class Table:
             self.merge_handler.thread.cancel()
             # use this to halt timer, but does not halt thread as per documentation
 
-    
     def __merge(self):
-        if len(self.merge_handler.rids_to_merge) != 0:         
+        if len(self.merge_handler.rids_to_merge) != 0:
             # dictonaries will error out if their size changes during copy, so use a mutex for copying
             self.merge_handler.dict_mutex.acquire()
             rid_dict = copy.deepcopy(self.merge_handler.rids_to_merge)
@@ -130,16 +133,15 @@ class Table:
             self.merge_handler.dict_mutex.release()
 
             for base_rid in rid_dict.keys():
-
                 # todo: need to allocate new space
                 page_range_index = self.page_directory[base_rid][0]
                 cur_page_range = self.page_ranges[page_range_index]
                 tail_rid = rid_dict[base_rid]
-                data = cur_page_range.get_record_with_specific_tail(base_rid, tail_rid, [1,1,1,1,1])
+                data = cur_page_range.get_record_with_specific_tail(base_rid, tail_rid, [1, 1, 1, 1, 1])
                 new_base_record = data
                 # Write new section
                 # For now, I am just going to write this new base record over the previous i.e.
-                #self.__overwite_previous_base_record(base_rid, new_base_record)
+                # self.__overwite_previous_base_record(base_rid, new_base_record)
 
                 # next, figure out merge deallocation   
             self.merge_handler.merge_end.append(time.time())
@@ -154,7 +156,6 @@ class Table:
     #         dealloc_rid = self.query_queue[0][0]
     #         self.merge_handler.dealloc_queue.append()
 
-
     # THIS FUNCTION WILL BE REMOVED AND IS ONLY USED TO TEST MERGES PURELY IN MEM
     # force schema to be zero
     def __overwite_previous_base_record(self, base_rid, new_data):
@@ -163,9 +164,13 @@ class Table:
         old_offset = cur_page_range.overwrite_previous_base_record(base_rid, new_data)
         self.merge_handler.outdated_offsets[base_rid] = old_offset
 
-    def __add_brids_to_page_directory(self, brids, page_range_index, page_set_index):
-        for i in range(brids):
+    def __add_brids_to_page_directory(self, brids, indir, indir_t, page_range_index, page_set_index):
+        for i in range(len(brids)):
             self.page_directory[brids[i]] = (page_range_index, page_set_index)
+            if indir_t[i] == BASE_RID_TYPE:
+                self.brid_to_trid[brids[i]] = indir[i]
+            else:
+                self.brid_to_trid[brids[i]] = None
 
     def insert_record(self, *columns):
         key_col = self.key
@@ -180,7 +185,6 @@ class Table:
         self.keys[key] = new_rid
         self.page_directory[new_rid] = (next_free_page_range_index, next_free_base_page_set_index)
 
-
         # continue with inserting the record here
         curr_page_range = self.page_ranges[next_free_page_range_index]
 
@@ -188,7 +192,7 @@ class Table:
         BUFFER_POOL.mark_as_dirty(self.name, next_free_page_range_index, next_free_base_page_set_index, BASE_RID_TYPE)
 
         # update key directory data for base
-        self.update_key_directory_data_for_base(new_rid, -1)
+        self.update_key_directory_data_for_base(new_rid, None)
         return curr_page_range.add_record(new_rid, col_list), new_rid
 
     def update_record(self, key, *columns):
@@ -197,7 +201,9 @@ class Table:
         tail_rid = self.__get_next_tail_rid()
         if self.__tail_page_sets_full(page_range_index):
             tail_page_set_index = len(self.page_ranges[page_range_index].tail_page_sets)
-            page_set, _, _, _, _, _ = Bufferpool.unpack_data(BUFFER_POOL.get_new_free_mem_space(self.name, page_range_index, tail_page_set_index, self.num_columns, TAIL_RID_TYPE))
+            page_set, _, _, _, _, _ = Bufferpool.unpack_data(
+                BUFFER_POOL.get_new_free_mem_space(self.name, page_range_index, tail_page_set_index, self.num_columns,
+                                                   TAIL_RID_TYPE))
             self.page_ranges[page_range_index].tail_page_sets[tail_page_set_index] = page_set
         tail_page_set_index = self.page_ranges[page_range_index].get_next_free_tail_page_set()
         result = self.page_ranges[page_range_index].update_record(base_rid, tail_rid, columns)
@@ -210,7 +216,7 @@ class Table:
 
         self.merge_handler.dict_mutex.acquire()
         # append to base RID to a set of RIDs to merge, only do so after update is done, but why does it seem like this is running first?
-        self.merge_handler.rids_to_merge[base_rid] = tail_rid 
+        self.merge_handler.rids_to_merge[base_rid] = tail_rid
         self.merge_handler.dict_mutex.release()
 
         return result
@@ -226,19 +232,29 @@ class Table:
             return False
 
         rid = self.keys[key]
-        self.__check_if_loaded(rid, BASE_RID_TYPE)
+        self.__check_if_base_loaded(rid)
         page_range_index = self.page_directory[rid][0]
         cur_page_range = self.page_ranges[page_range_index]
+
+        tail_rid = self.brid_to_trid[rid]
+        self.__check_if_tail_loaded(tail_rid, page_range_index)
+
         data = cur_page_range.get_record(rid, query_columns)
         return rid, data
 
-    def __check_if_loaded(self, rid, rid_t):
-        if not self.page_directory.get(rid):
-            self.__load_record_from_disk(rid, rid_t)
+    def __check_if_base_loaded(self, rid):
+            if not self.page_directory.get(rid):
+                self.__load_record_from_disk(rid, BASE_RID_TYPE)
+
+    def __check_if_tail_loaded(self, rid, page_range_index):
+        # check if tail page page set needs to be loaded
+        if rid:
+            if not self.page_ranges[page_range_index].tail_rids.get(rid):
+                self.__load_record_from_disk(rid, TAIL_RID_TYPE)
 
     def remove_record(self, key):
         if key in self.keys:
-            #self.keys.pop(key)
+            # self.keys.pop(key)
             return True
 
         return False
@@ -259,7 +275,8 @@ class Table:
             # no current page range, build one for starters and append to list
             new_page_range = PageRange(self.num_columns)
             for i in range(PAGE_SETS):
-                page_set, _, _, _, _, _ = Bufferpool.unpack_data(BUFFER_POOL.get_new_free_mem_space(self.name, 0, i, self.num_columns, BASE_RID_TYPE))
+                page_set, _, _, _, _, _ = Bufferpool.unpack_data(
+                    BUFFER_POOL.get_new_free_mem_space(self.name, 0, i, self.num_columns, BASE_RID_TYPE))
                 new_page_range.base_page_sets[i] = page_set
             self.page_ranges[0] = new_page_range
             # our index will be our only page range
@@ -274,7 +291,8 @@ class Table:
         new_page_range = PageRange(self.num_columns)
         for i in range(PAGE_SETS):
             page_set, _, _, _, _, _ = Bufferpool.unpack_data(
-                BUFFER_POOL.get_new_free_mem_space(self.name, len(self.page_ranges), i, self.num_columns, BASE_RID_TYPE))
+                BUFFER_POOL.get_new_free_mem_space(self.name, len(self.page_ranges), i, self.num_columns,
+                                                   BASE_RID_TYPE))
             new_page_range.base_page_sets[i] = page_set
         self.page_ranges[len(self.page_ranges)] = new_page_range
 
@@ -311,10 +329,9 @@ class Table:
         brid_info = self.page_directory[brid]
         page_range_index = brid_info[0]
         base_page_set_index = brid_info[1]
-        self.brid_block_start[brid] = (self.num_columns + META_DATA_PAGES) * (base_page_set_index + (page_range_index // PAGE_SETS))
+        self.brid_block_start[brid] = self.disk.get_next_base_block()
         self.brid_to_trid[brid] = trid
 
     def update_key_directory_data_for_tail(self, trid, brid):
         self.brid_to_trid[brid] = trid
-        self.trid_block_start[trid] = (self.num_columns + META_DATA_PAGES) * self.disk.get_next_tail_block()
-
+        self.trid_block_start[trid] = self.disk.get_next_tail_block()

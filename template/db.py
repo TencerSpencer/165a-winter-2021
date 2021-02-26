@@ -40,6 +40,8 @@ class Database():
         d = Disk(self.path, name, num_columns, key)
         table = d.read_table()
         table.disk = d
+        table.next_base_rid = table.disk.next_base_rid
+        table.next_tail_rid = table.disk.next_tail_rid
         self.disks[name] = d
         self.tables[name] = table
         BUFFER_POOL.tables[name] = self.tables[name]
