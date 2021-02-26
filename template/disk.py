@@ -3,7 +3,7 @@ import math
 from template.page import *
 from template.pageSet import *
 from template.table import *
-
+from template.tools import *
 
 class Disk:
     def __init__(self, db_dir, table_name, num_columns, key_column):
@@ -70,7 +70,7 @@ class Disk:
         f.close()
 
     def read_table(self):
-        keys, base_block_start, tail_block_starts = self.get_key_directory_data()
+        keys, base_block_start, tail_block_starts = self.read_key_directory_data()
         table = Table(self.fn, self.num_columns, self.key_column)
         table.next_base_rid = self.next_base_rid
         table.next_tail_rid = self.next_tail_rid
@@ -79,7 +79,7 @@ class Disk:
         table.trid_block_start = tail_block_starts
         return table
 
-    def get_key_directory_data(self):
+    def read_key_directory_data(self):
         keys = {}
         base_block_starts = {}
         tail_block_starts = {}
@@ -113,12 +113,6 @@ class Disk:
                 else:
                     break
 
-        if keys.get(-1):
-            if keys[-1] == -1: # remove invalid entry
-                keys.pop(-1)
-                base_block_starts.pop(-1)
-                tail_block_starts.pop(-1)
-
         return keys, base_block_starts, tail_block_starts
 
     def write_key_directory_set(self, keys, base_block_starts, tail_block_starts):
@@ -136,20 +130,24 @@ class Disk:
         trid_block_starts_bytes = []
 
         # convert 64 bit integers into bytes
-        for i in range(len(k)):
-            for byte in int.to_bytes(k[i], length=8, byteorder="little"):
+        for num in k:
+            for byte in int.to_bytes(num, length=8, byteorder="little"):
                 k_bytes.append(byte)
 
-            for byte in int.to_bytes(brids[i], length=8, byteorder="little"):
+        for num in brids:
+            for byte in int.to_bytes(num, length=8, byteorder="little"):
                 brids_bytes.append(byte)
 
-            for byte in int.to_bytes(trids[i], length=8, byteorder="little"):
+        for num in trids:
+            for byte in int.to_bytes(num, length=8, byteorder="little"):
                 trids_bytes.append(byte)
 
-            for byte in int.to_bytes(brid_block_starts[i], length=8, byteorder="little"):
+        for num in brid_block_starts:
+            for byte in int.to_bytes(num, length=8, byteorder="little"):
                 brid_block_starts_bytes.append(byte)
 
-            for byte in int.to_bytes(trid_block_starts[i], length=8, byteorder="little"):
+        for num in trid_block_starts:
+            for byte in int.to_bytes(num, length=8, byteorder="little"):
                 trid_block_starts_bytes.append(byte)
 
         # append bytes to data properly
@@ -157,43 +155,23 @@ class Disk:
             (len(k) // RECORDS_PER_PAGE) < (len(k) / RECORDS_PER_PAGE) else (len(k) // RECORDS_PER_PAGE)
         for i in range(key_directory_sets_count):
             bytes = bytearray(k_bytes[(PAGE_SIZE * i):(PAGE_SIZE * i) + PAGE_SIZE])
-            if len(bytes) != PAGE_SIZE:
-                invalids = bytearray(PAGE_SIZE - len(bytes))
-                for i in range(len(invalids)):
-                    invalids[i] = 0
-                bytes.extend(invalids)
+            pad_byte_array(bytes)
             data.extend(bytearray(bytes))
 
             bytes = bytearray(brids_bytes[(PAGE_SIZE * i):(PAGE_SIZE * i) + PAGE_SIZE])
-            if len(bytes) != PAGE_SIZE:
-                invalids = bytearray(PAGE_SIZE - len(bytes))
-                for i in range(len(invalids)):
-                    invalids[i] = 0
-                bytes.extend(invalids)
+            pad_byte_array(bytes)
             data.extend(bytearray(bytes))
 
             bytes = bytearray(trids_bytes[(PAGE_SIZE * i):(PAGE_SIZE * i) + PAGE_SIZE])
-            if len(bytes) != PAGE_SIZE:
-                invalids = bytearray(PAGE_SIZE - len(bytes))
-                for i in range(len(invalids)):
-                    invalids[i] = 0
-                bytes.extend(invalids)
+            pad_byte_array(bytes)
             data.extend(bytearray(bytes))
 
             bytes = bytearray(brid_block_starts_bytes[(PAGE_SIZE * i):(PAGE_SIZE * i) + PAGE_SIZE])
-            if len(bytes) != PAGE_SIZE:
-                invalids = bytearray(PAGE_SIZE - len(bytes))
-                for i in range(len(invalids)):
-                    invalids[i] = 0
-                bytes.extend(invalids)
+            pad_byte_array(bytes)
             data.extend(bytearray(bytes))
 
             bytes = bytearray(trid_block_starts_bytes[(PAGE_SIZE * i):(PAGE_SIZE * i) + PAGE_SIZE])
-            if len(bytes) != PAGE_SIZE:
-                invalids = bytearray(PAGE_SIZE - len(bytes))
-                for i in range(len(invalids)):
-                    invalids[i] = 0
-                bytes.extend(invalids)
+            pad_byte_array(bytes)
             data.extend(bytearray(bytes))
 
         # rewrite key directory file with new key directory data

@@ -1,7 +1,7 @@
 from template.bufferpool_config import *
 from collections import deque
 from template.pageSet import PageSet
-
+from template.tools import *
 
 class Bufferpool:
     def __init__(self):
@@ -249,6 +249,7 @@ class Bufferpool:
         timestamps = meta[1]
         schema = meta[2]
         indirections = meta[3]
+
         indirection_types = meta[4]
 
         rids_data = []
@@ -257,21 +258,41 @@ class Bufferpool:
         indirections_data = []
         indirection_types_data = []
 
-        for i in range(len(rids)):
-            for byte in int.to_bytes(rids[i], length=8, byteorder="little"):
+        for num in rids:
+            for byte in int.to_bytes(num, length=8, byteorder="little"):
                 rids_data.append(byte)
-            for byte in int.to_bytes(timestamps[i], length=8, byteorder="little"):
+        rids_ba = bytearray(rids_data)
+        pad_byte_array(rids_ba)
+
+        for num in timestamps:
+            for byte in int.to_bytes(num, length=8, byteorder="little"):
                 timestamps_data.append(byte)
-            for byte in int.to_bytes(schema[i], length=8, byteorder="little"):
+        timestamps_ba = bytearray(timestamps_data)
+        pad_byte_array(timestamps_ba)
+
+        for num in schema:
+            for byte in int.to_bytes(num, length=8, byteorder="little"):
                 schema_data.append(byte)
-            for byte in int.to_bytes(indirections[i], length=8, byteorder="little"):
-                indirections_data.append(byte)
-            for byte in int.to_bytes(indirection_types[i], length=8, byteorder="little"):
-                indirection_types_data.append(byte)
+        schema_ba = bytearray(schema_data)
+        pad_byte_array(schema_ba)
+
+        for num in indirections:
+            if num:  # since indirection can be none, check if its none
+                for byte in int.to_bytes(num, length=8, byteorder="little"):
+                    indirections_data.append(byte)
+        indirections_ba = bytearray(indirections_data)
+        pad_byte_array(indirections_ba)
+
+        for num in indirection_types:
+            if num: # since indirection type can be none, check if its none
+                for byte in int.to_bytes(num, length=8, byteorder="little"):
+                    indirection_types_data.append(byte)
+        indirection_types_ba = bytearray(indirection_types_data)
+        pad_byte_array(indirection_types_ba, 2)
 
         meta_start = len(data.pages) - META_DATA_PAGES
-        data.pages[meta_start].data = bytearray(rids_data)
-        data.pages[meta_start + 1].data = bytearray(timestamps_data)
-        data.pages[meta_start + 2].data = bytearray(schema_data)
-        data.pages[meta_start + 3].data = bytearray(indirections_data)
-        data.pages[meta_start + 4].data = bytearray(indirection_types_data)
+        data.pages[meta_start].data = rids_ba
+        data.pages[meta_start + 1].data = timestamps_ba
+        data.pages[meta_start + 2].data = schema_ba
+        data.pages[meta_start + 3].data = indirections_ba
+        data.pages[meta_start + 4].data = indirection_types_ba

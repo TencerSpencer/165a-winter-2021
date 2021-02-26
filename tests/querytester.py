@@ -5,7 +5,7 @@ import time
 
 db = Database()
 db.open("./ECS165")
-grades_table = db.create_table('Grades', 5, 0)
+grades_table = db.create_table('QueryTester', 5, 0)
 # index = Index(grades_table)
 query = Query(grades_table)
 # print("Inserting 1M items")
@@ -14,6 +14,7 @@ for i in range(10_001):
 query.insert(*[1, 2, 3, 4, 5])
 query.insert(*[42, 2, 3, 4, 5])
 query.insert(*[88, 7, 12, 18, 99])
+query.delete(42)
 """query.insert(*[88, 7, 12, 18, 99])
 query.insert(*[88, 7, 12, 18, 99])
 query.insert(*[88, 7, 12, 18, 99])"""

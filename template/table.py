@@ -79,7 +79,7 @@ class Table:
 
     def __load_record_from_disk(self, rid, set_type):
         block_start_index = self.brid_block_start[rid] if set_type == BASE_RID_TYPE else self.trid_block_start[rid]
-        page_set_index = block_start_index // self.num_columns + META_DATA_PAGES
+        page_set_index = block_start_index // (self.num_columns + META_DATA_PAGES)
         page_range_index = page_set_index // PAGE_SETS
         data = BUFFER_POOL.get_page_set(self.name, self.num_columns, self.disk, page_range_index, page_set_index, set_type, block_start_index)
 
@@ -233,7 +233,7 @@ class Table:
         return rid, data
 
     def __check_if_loaded(self, rid, rid_t):
-        if not self.page_directory[rid]:
+        if not self.page_directory.get(rid):
             self.__load_record_from_disk(rid, rid_t)
 
     def remove_record(self, key):
