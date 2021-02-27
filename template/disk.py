@@ -220,6 +220,7 @@ class Disk:
 
     def write_base_page_set(self, page_set, block_start_index):
         with open(self.base_fn, "ab") as f:
+            f.seek(0)
             f.seek(block_start_index * PAGE_SIZE)
             for i in range(self.num_columns + META_DATA_PAGES):
                 f.write(page_set.pages[i].data)
@@ -235,6 +236,7 @@ class Disk:
 
     def write_tail_page_set(self, page_set, block_start_index):
         with open(self.tail_fn, "ab") as f:
+            f.seek(0)
             f.seek(block_start_index * PAGE_SIZE)
             for i in range(self.num_columns + META_DATA_PAGES):
                 f.write(page_set.pages[i].data)

@@ -3,13 +3,14 @@ from collections import deque
 from template.pageSet import PageSet
 from template.tools import *
 
+
 class Bufferpool:
     def __init__(self):
 
         # eviction policy currently will be least recently used
 
         # here, data = page_set and meta  data
-        self.pages_mem_mapping = {}  # {(table_name, page_range_index, page_set_index, set_type)} : data, num_columns, block_start_index}
+        self.pages_mem_mapping = {}  # {(table_name, page_range_index, page_set_index, set_type)} : data, num_columns }
         self.dirty_page_sets = set()  # set of (table_name, page_range_index, page_set_index, set_type) that are dirty and need to be written to disk before eviction
         self.pinned_page_sets = {}  # dict of (table_name, page_range_index, page_set_index, set_type) : pin_num indicating if the current RID is pinned. By default, this is zero
         self.tables = {}  # dict of {table name : pointer } for easy communication
@@ -19,7 +20,8 @@ class Bufferpool:
         # consistency is important, pop_left to remove, and append to insert to the right
         # if something is re-referenced, we will remove and then append again
 
-    def get_page_set(self, table_name, num_columns, disk, page_range_index, page_set_index, set_type, block_start_index):
+    def get_page_set(self, table_name, num_columns, disk, page_range_index, page_set_index, set_type,
+                     block_start_index):
 
         # if data is not in memory
         if not self.pages_mem_mapping.get((table_name, page_range_index, page_set_index, set_type)):
@@ -30,7 +32,7 @@ class Bufferpool:
             self.pages_mem_mapping[(table_name, page_range_index, page_set_index, set_type)] = data, num_columns
 
         else:  # pull data from current mem
-            data = self.pages_mem_mapping[(table_name, page_range_index, page_set_index, set_type)]
+            data, _ = self.pages_mem_mapping[(table_name, page_range_index, page_set_index, set_type)]
             # reset its position in lru
             self.lru_enforcement.remove((table_name, page_range_index, page_set_index))
             self.lru_enforcement.append((table_name, page_range_index, page_set_index))
@@ -130,78 +132,9 @@ class Bufferpool:
             meta_data = table.get_meta_data(page_range_index, page_set, set_type)
             self.__write_to_disk(table_name, page_range_index, page_set, set_type, meta_data)
 
-
     # allow a table to mark pagesets as dirty
     def mark_as_dirty(self, table_name, page_range_index, page_set_index, set_type):
         self.dirty_page_sets.add((table_name, page_range_index, page_set_index, set_type))
-
-
-    @staticmethod
-    def pack_data(page_set, rids, timestamps, schema, indirections, indirection_types):
-        data = PageSet(len(page_set.pages) + META_DATA_PAGES)
-
-        meta_start = len(page_set.pages)
-        rids_data = []
-        timestamps_data = []
-        schema_data = []
-        indirections_data = []
-        indirection_types_data = []
-
-        for i in range(len(rids)):
-            for byte in int.to_bytes(rids[i], length=8, byteorder="little"):
-                rids_data.append(byte)
-            for byte in int.to_bytes(timestamps[i], length=8, byteorder="little"):
-                timestamps_data.append(byte)
-            for byte in int.to_bytes(schema[i], length=8, byteorder="little"):
-                schema_data.append(byte)
-            for byte in int.to_bytes(indirections[i], length=8, byteorder="little"):
-                indirections_data.append(byte)
-            for byte in int.to_bytes(indirection_types[i], length=8, byteorder="little"):
-                indirection_types_data.append(byte)
-
-        # append bytes to data properly
-        bytes = bytearray(rids_data)
-        if len(bytes) != PAGE_SIZE:
-            invalids = bytearray(PAGE_SIZE - len(bytes))
-            for i in range(len(invalids)):
-                invalids[i] = -1
-            bytes.extend(invalids)
-        data.pages[meta_start].data = bytes
-
-        bytes = bytearray(timestamps_data)
-        if len(bytes) != PAGE_SIZE:
-            invalids = bytearray(PAGE_SIZE - len(bytes))
-            for i in range(len(invalids)):
-                invalids[i] = -1
-            bytes.extend(invalids)
-        data.pages[meta_start + 1].data = bytes
-
-        bytes = bytearray(schema_data)
-        if len(bytes) != PAGE_SIZE:
-            invalids = bytearray(PAGE_SIZE - len(bytes))
-            for i in range(len(invalids)):
-                invalids[i] = -1
-            bytes.extend(invalids)
-        data.pages[meta_start + 2].data = bytes
-
-        bytes = bytearray(indirections_data)
-        if len(bytes) != PAGE_SIZE:
-            invalids = bytearray(PAGE_SIZE - len(bytes))
-            for i in range(len(invalids)):
-                invalids[i] = -1
-            bytes.extend(invalids)
-        data.pages[meta_start + 3].data = bytes
-
-        bytes = bytearray(indirection_types_data)
-        if len(bytes) != PAGE_SIZE:
-            invalids = bytearray(PAGE_SIZE - len(bytes))
-            for i in range(len(invalids)):
-                invalids[i] = -1
-            bytes.extend(invalids)
-        data.pages[meta_start + 4].data = bytes
-
-        return data
-
 
     @staticmethod
     def unpack_data(data):
@@ -230,6 +163,19 @@ class Bufferpool:
             schema.append(int.from_bytes(schema_data.data[(i * 8):(i * 8) + 8], "little"))
             indirections.append(int.from_bytes(indirections_data.data[(i * 8):(i * 8) + 8], "little"))
             indirection_types.append(int.from_bytes(indirection_types_data.data[(i * 8):(i * 8) + 8], "little"))
+
+        cutoff = -1
+        for i in range(RECORDS_PER_PAGE):
+            if indirection_types[i] == 4:
+                cutoff = i
+                break
+
+        if cutoff != -1:
+            rids = rids[0:cutoff]
+            timestamps = timestamps[0:cutoff]
+            schema = schema[0:cutoff]
+            indirections = indirections[0:cutoff]
+            indirection_types = indirection_types[0:cutoff]
 
         return page_set, rids, timestamps, schema, indirections, indirection_types
 
@@ -288,11 +234,11 @@ class Bufferpool:
         pad_byte_array(indirections_ba)
 
         for num in indirection_types:
-            if num: # since indirection type can be none, check if its none
+            if num:  # since indirection type can be none, check if its none
                 for byte in int.to_bytes(num, length=8, byteorder="little"):
                     indirection_types_data.append(byte)
         indirection_types_ba = bytearray(indirection_types_data)
-        pad_byte_array(indirection_types_ba, 2)
+        pad_byte_array(indirection_types_ba, 4)
 
         meta_start = len(data.pages) - META_DATA_PAGES
         data.pages[meta_start].data = rids_ba

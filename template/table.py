@@ -92,6 +92,7 @@ class Table:
             # this implementation will first be in mem
             self.page_ranges[page_range_index].add_tail_page_set_from_disk(page_set, page_set_index, trids,
                                                                            times, schema, indir, indir_t)
+            self.__add_trids_to_key_directory_info(trids, block_start_index)
 
     # for help with background process operation and to ensure timer is consistent
     # https://stackoverflow.com/questions/8600161/executing-periodic-actions-in-python
@@ -156,10 +157,14 @@ class Table:
     def __add_brids_to_page_directory(self, brids, indir, indir_t, page_range_index, page_set_index):
         for i in range(len(brids)):
             self.page_directory[brids[i]] = (page_range_index, page_set_index)
-            if indir_t[i] == TAIL_RID_TYPE:
+            if indir_t[i] == TAIL_RID_TYPE or indir_t[i] == DELETED_WT_RID_TYPE:
                 self.brid_to_trid[brids[i]] = indir[i]
             else:
                 self.brid_to_trid[brids[i]] = None
+
+    def __add_trids_to_key_directory_info(self, trids, block_start_index):
+        for rid in trids:
+            self.trid_block_start[rid] = block_start_index
 
     def insert_record(self, *columns):
         key_col = self.key
@@ -231,24 +236,24 @@ class Table:
         if key not in self.keys:
             return False
 
-        rid = self.keys[key]
-        self.__check_if_base_loaded(rid)
-        page_range_index = self.page_directory[rid][0]
+        brid = self.keys[key]
+        self.__check_if_base_loaded(brid)
+        page_range_index = self.page_directory[brid][0]
         cur_page_range = self.page_ranges[page_range_index]
 
-        tail_rid = self.brid_to_trid[rid]
+        tail_rid = self.brid_to_trid[brid]
         self.__check_if_tail_loaded(tail_rid, page_range_index)
 
-        if not self.page_ranges[page_range_index].is_valid(rid):  # check if rid has been invalidated 
+        if not self.page_ranges[page_range_index].is_valid(brid):  # check if brid has been invalidated
             return False 
 
-        data = cur_page_range.get_record(rid, query_columns)
-        return rid, data
+        data = cur_page_range.get_record(brid, query_columns)
+        return brid, data
 
     def __check_if_base_loaded(self, rid):
             page_dir_info = self.page_directory.get(rid)
             if not page_dir_info:
-                page_range_index = self.brid_to_trid[rid] // (self.num_columns + META_DATA_PAGES)
+                page_range_index = rid // (RECORDS_PER_PAGE * PAGE_SETS)
                 self.__load_record_from_disk(rid, page_range_index, BASE_RID_TYPE)
 
     def __check_if_tail_loaded(self, rid, page_range_index):
@@ -259,11 +264,16 @@ class Table:
 
     def remove_record(self, key):
         if key in self.keys:
-            brid = self.keys[key] 
-            page_range_index, _ = self.page_directory[brid] 
+            brid = self.keys[key]
+            self.__check_if_base_loaded(brid)
+            page_range_index, page_set = self.page_directory[brid]
             offset = self.page_ranges[page_range_index].base_rids[brid][1] 
-            _, tail_rid = self.page_ranges[page_range_index].base_indirections[offset] 
-            self.page_ranges[page_range_index].base_indirections[offset] = (INVALID_RID_TYPE, tail_rid) 
+            _, tail_rid = self.page_ranges[page_range_index].base_indirections[offset]
+            if tail_rid:
+                self.page_ranges[page_range_index].base_indirections[offset] = (DELETED_WT_RID_TYPE, tail_rid)
+            else:
+                self.page_ranges[page_range_index].base_indirections[offset] = (DELETED_NT_RID_TYPE, tail_rid)
+            BUFFER_POOL.mark_as_dirty(self.name, page_range_index, page_set, TAIL_RID_TYPE)
             return True
 
         return False
@@ -310,7 +320,6 @@ class Table:
 
     def get_meta_data(self, page_range_index, page_set_index, set_type):
         page_range = self.page_ranges[page_range_index]
-        start_offset = RECORDS_PER_PAGE * page_set_index
         timestamps = []
         schema = []
         indir = []
@@ -318,17 +327,19 @@ class Table:
         if set_type == BASE_RID_TYPE:
             rids = [k for k, v in page_range.base_rids.items() if v[0] == page_set_index]
             for i in range(len(rids)):
-                timestamps.append(page_range.base_timestamps[start_offset + i])
-                schema.append(page_range.base_schema_encodings[start_offset + i])
-                temp = page_range.base_indirections[start_offset + i]
+                offset = page_range.tail_rids[rids[i]][1]
+                timestamps.append(page_range.base_timestamps[offset])
+                schema.append(page_range.base_schema_encodings[offset])
+                temp = page_range.base_indirections[offset]
                 indir.append(temp[1])
                 indir_t.append(temp[0])
         else:
             rids = [k for k, v in page_range.tail_rids.items() if v[0] == page_set_index]
             for i in range(len(rids)):
-                timestamps.append(page_range.tail_timestamps[start_offset + i])
-                schema.append(page_range.tail_schema_encodings[start_offset + i])
-                temp = page_range.tail_indirections[start_offset + i]
+                offset = page_range.tail_rids[rids[i]][1]
+                timestamps.append(page_range.tail_timestamps[offset])
+                schema.append(page_range.tail_schema_encodings[offset])
+                temp = page_range.tail_indirections[offset]
                 indir.append(temp[1])
                 indir_t.append(temp[0])
 

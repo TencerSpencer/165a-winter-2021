@@ -149,15 +149,6 @@ class PageRange:
         self.base_rids.pop(rid)
 
     def update_record(self, base_rid, tail_rid, columns):
-        # look for next available tail page set, create one if it does not exist
-        # get the next available RID and map it to a page in the given tail page
-        # CUMULATIVE APPROACH: look at columns info and update it with the latest tail page's info
-        # generate a new schema based on this UPDATED column and then have all this data get written to the tail page
-        # set tail's schema and base's schema to the newly generated schema
-        # if a previous tail existed, set that tail's indirection to the current tail
-        # set the base's indirection to the new tail and the new tail's indirection to the previous tail
-        # I think that covers everything
-
         # get previous tail rid
         prev_base_indirection = self.__get_indirection(base_rid)
         prev_tail_rid = prev_base_indirection[1]
@@ -186,7 +177,9 @@ class PageRange:
             new_columns = self.__get_new_columns_for_new_tail(prev_tail_rid, columns)
 
         # write new tail with new schema and previous tails rid
-        self.__write_tail_record(tail_rid, new_schema, (0, prev_tail_rid) if prev_tail_rid == (None, None) else (1, prev_tail_rid), new_columns)
+        self.__write_tail_record(tail_rid, new_schema,
+                                 (0, prev_tail_rid) if prev_tail_rid == (None, None) else (1, prev_tail_rid),
+                                 new_columns)
 
         return True
 
@@ -235,8 +228,8 @@ class PageRange:
         self.base_timestamps[offset] = int(round(time.time() * 1000))
 
     def __write_tail_record(self, rid, schema, indirection, columns):
-        #if self.__tail_page_sets_full():
-            #self.tail_page_sets[len(self.tail_page_sets)] = BUFFER_POOL.get_new_free_mem_space()
+        # if self.__tail_page_sets_full():
+        # self.tail_page_sets[len(self.tail_page_sets)] = BUFFER_POOL.get_new_free_mem_space()
 
         tail_page_set_index = int(self.num_tail_records // RECORDS_PER_PAGE)
         tail_page_set = self.tail_page_sets[tail_page_set_index]
@@ -299,4 +292,6 @@ class PageRange:
 
     def is_valid(self, rid):
         offset = self.base_rids[rid][1]
-        return self.base_indirections[offset][0] != INVALID_RID_TYPE
+        return self.base_indirections[offset][0] != DELETED_WT_RID_TYPE and \
+               self.base_indirections[offset][0] != DELETED_NT_RID_TYPE and \
+               self.base_indirections[offset][0] != NO_RID_TYPE
