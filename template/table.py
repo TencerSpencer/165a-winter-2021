@@ -130,7 +130,9 @@ class Table:
             self.merge_handler.outdated_offsets.clear()
             self.merge_handler.dict_mutex.release()
 
-            for _ in range(NUMBER_OF_BASE_PAGE_SETS_TO_CHECK):
+            check_num = NUMBER_OF_BASE_PAGE_SETS_TO_CHECK if len(self.merge_handler.full_base_page_sets) >= 3 else len(
+                self.merge_handler.full_base_page_sets)
+            for _ in range(check_num):
                 # Compare offsets between full_base_page_sets and outdated_offsets to see if we have a sufficient amount of updates
                 curr_range, curr_base = self.merge_handler.full_base_page_sets.popleft()
                 if list(rid_dict.values()).count((curr_range, curr_base)) >= MERGE_THRESHOLD:
@@ -142,17 +144,18 @@ class Table:
 
     # merge the selected base_page_set,
     def __merge(self, page_range_index, base_page_set_index):
-
-        # I'm not exactly sure how to go about this part,
-        # If there's a function that will return an entire page set based on index and not an RID, this would work well.
-        # Then, we can loop through each record inside and check its schema. If the schema is zero, skip it.
-        # if the schema is not zero, we will combine the base page and the latest tail page and then we will 
-        # additionally, we can erase the schema to prevent further unncessary updates
-        # overwrite the previous base page set where all this data was stored in
-        
-        # I kept this statement because it was how I was getting the record previously, but this will no longer work
-        # data = cur_page_range.get_record_with_specific_tail(base_rid, tail_rid, [1, 1, 1, 1, 1])
-        pass
+        page_range = self.page_ranges[page_range_index]
+        base_page_set = copy.deepcopy(page_range.base_page_sets[base_page_set_index])
+        brids = [k for k, v in self.page_directory.items() if v[0] == page_range_index and v[1] == base_page_set_index]
+        self.__check_if_base_loaded(brids[0]) # just need first one since all brids are in same page set
+        for i in range(len(brids)):
+            _, offset = page_range.base_rids[brids[i]]
+            if page_range.base_schema_encodings[offset] != 0:
+                tail_rid = page_range.base_indirections[offset][1]
+                self.__check_if_tail_loaded(tail_rid, page_range_index)
+                data = page_range.get_record_with_specific_tail(brids[i], tail_rid, [1] * self.num_columns)
+                base_page_set.overwrite_base_record(data, offset)
+        page_range.base_page_sets[base_page_set_index] = base_page_set
 
     def __add_brids_to_page_directory(self, brids, indir, indir_t, page_range_index, page_set_index):
         for i in range(len(brids)):
@@ -200,7 +203,11 @@ class Table:
 
     def update_record(self, key, *columns):
         base_rid = self.keys[key]
+        self.__check_if_base_loaded(base_rid)
+
         page_range_index, base_page_set_index = self.page_directory[base_rid]
+        tail_rid = self.brid_to_trid[base_rid]
+        self.__check_if_tail_loaded(tail_rid, page_range_index)
         tail_rid = self.__get_next_tail_rid()
         if self.__tail_page_sets_full(page_range_index):
             tail_page_set_index = len(self.page_ranges[page_range_index].tail_page_sets)
