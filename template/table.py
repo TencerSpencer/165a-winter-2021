@@ -2,6 +2,7 @@ import copy, threading, time
 from template.index import Index
 from template.pageRange import PageRange
 from template.config import *
+from collections import deque
 
 
 class Record:
@@ -16,7 +17,6 @@ class MergeHandler:
     def __init__(self):
         # setup merge variables
         self.next_time_to_call = time.time()  # prepare consistent time callback
-        self.timer_interval = .5  # every fourth a second, the timer will trigger, used as an example
         self.thread_in_crit_section = False
         self.thread_stopped = False
 
@@ -24,21 +24,11 @@ class MergeHandler:
         # https://docs.python.org/3/library/threading.html#threading.Lock.acquire
         self.dict_mutex = threading.Lock()
 
-        # track RIDs to merge inside a dict, this implementation has yet to be setup per page range
-        # {base rid : }
-        self.rids_to_merge = {}
-
-        # handlers for epoch based deallocation [(RID queried : query start time)]
-        self.query_queue = []
+        # full base page sets, need to append upon insertion
+        self.full_base_page_sets = deque() # (page_range_offset, base_page_set_offset)
 
         # dict of base RID to offset in old copy of base record
-        self.outdated_offsets = {}  # {base RID : old offset}
-
-        # handler for deallocation queue (pages to be deallocated)
-        self.dealloc_queue = []
-
-        # list of sequential merge end times, queue emulation
-        self.merge_end = []
+        self.outdated_offsets = {}  # {base RID : page_range_offset, base_page_set_offset}
 
         # create background proc thread
         self.thread = None
@@ -107,13 +97,17 @@ class Table:
     # https://stackoverflow.com/questions/8600161/executing-periodic-actions-in-python
     def __merge_callback(self):
         if not self.merge_handler.thread_stopped:
-            # call _merge
-            self.merge_handler.thread_in_crit_section = True
-            self.__merge()
-            self.merge_handler.thread_in_crit_section = False
+
+            # if no base page set is full, do not perform a merge
+            if len(self.merge_handler.full_base_page_sets) != 0:
+                # call _merge
+                self.merge_handler.thread_in_crit_section = True
+                self.__check_for_merge()
+                self.merge_handler.thread_in_crit_section = False
+
             self.merge_handler.thread = threading.Timer(self.merge_handler.next_time_to_call - time.time(),
                                                         self.__merge_callback)
-            self.merge_handler.next_time_to_call = self.merge_handler.next_time_to_call + self.merge_handler.timer_interval
+            self.merge_handler.next_time_to_call = self.merge_handler.next_time_to_call + MERGE_TIMER_INTERVAL
             self.merge_handler.thread.start()
 
     def shut_down_timer(self):  # if constant printing is occurring, this wont properly stop
@@ -126,45 +120,38 @@ class Table:
             self.merge_handler.thread.cancel()
             # use this to halt timer, but does not halt thread as per documentation
 
-    def __merge(self):
+    # IF HAVING ISSUES TO GET MERGES TO OCCUR, TRY ADJUSTING MERGE_TIMER_INTERVAL IN CONFIG.PY
+    def __check_for_merge(self):
         if len(self.merge_handler.rids_to_merge) != 0:
             # dictonaries will error out if their size changes during copy, so use a mutex for copying
             self.merge_handler.dict_mutex.acquire()
-            rid_dict = copy.deepcopy(self.merge_handler.rids_to_merge)
-            self.merge_handler.rids_to_merge.clear()
+            rid_dict = copy.deepcopy(self.merge_handler.outdated_offsets)
+            self.merge_handler.outdated_offsets.clear()
             self.merge_handler.dict_mutex.release()
 
-            for base_rid in rid_dict.keys():
-                # todo: need to allocate new space
-                page_range_index = self.page_directory[base_rid][0]
-                cur_page_range = self.page_ranges[page_range_index]
-                tail_rid = rid_dict[base_rid]
-                data = cur_page_range.get_record_with_specific_tail(base_rid, tail_rid, [1, 1, 1, 1, 1])
-                new_base_record = data
-                # Write new section
-                # For now, I am just going to write this new base record over the previous i.e.
-                # self.__overwite_previous_base_record(base_rid, new_base_record)
+            for in range(NUMBER_OF_BASE_PAGE_SETS_TO_CHECK):
+                # Compare offsets between full_base_page_sets and outdated_offsets to see if we have a sufficient amount of updates
+                curr_range, curr_base = self.merge_handler.full_base_page_sets.popleft()
+                if (rid_dict.values().count((curr_range, curr_base)) >= MERGE_THRESHOLD):
+                    # merge base_page_set
+                    self.__merge(curr_range, curr_base)
 
-                # next, figure out merge deallocation   
-            self.merge_handler.merge_end.append(time.time())
+                # no matter what, reinsert the base page set into the queue
+                self.merge_handler.full_base_page_sets.append((curr_range, curr_base)) 
 
-    # REMOVED - DEALLOC NOT REQUIRED
-    # deallocate base pages when all active queries started after merge time
-    # def __dealloc(self):
-    #     most_recent_merge = self.merge_handler.merge_end.pop(0)
+    # merge the selected base_page_set,
+    def __merge(self, page_range_index, base_page_set_index):
 
-    #     # peek first active query, if start time > most recent merge, deallocate base page
-    #     if self.query_queue[0][1] > most_recent_merge:
-    #         dealloc_rid = self.query_queue[0][0]
-    #         self.merge_handler.dealloc_queue.append()
-
-    # THIS FUNCTION WILL BE REMOVED AND IS ONLY USED TO TEST MERGES PURELY IN MEM
-    # force schema to be zero
-    def __overwite_previous_base_record(self, base_rid, new_data):
-        page_range_index = self.page_directory[base_rid][0]
-        cur_page_range = self.page_ranges[page_range_index]
-        old_offset = cur_page_range.overwrite_previous_base_record(base_rid, new_data)
-        self.merge_handler.outdated_offsets[base_rid] = old_offset
+        # I'm not exactly sure how to go about this part,
+        # If there's a function that will return an entire page set based on index and not an RID, this would work well.
+        # Then, we can loop through each record inside and check its schema. If the schema is zero, skip it.
+        # if the schema is not zero, we will combine the base page and the latest tail page and then we will 
+        # additionally, we can erase the schema to prevent further unncessary updates
+        # overwrite the previous base page set where all this data was stored in
+        
+        # I kept this statement because it was how I was getting the record previously, but this will no longer work
+        # data = cur_page_range.get_record_with_specific_tail(base_rid, tail_rid, [1, 1, 1, 1, 1])
+        pass
 
     def __add_brids_to_page_directory(self, brids, indir, indir_t, page_range_index, page_set_index):
         for i in range(len(brids)):
@@ -197,11 +184,18 @@ class Table:
         self.brid_to_trid[new_rid] = None
         self.brid_block_start[new_rid] = (new_rid // RECORDS_PER_PAGE) * (self.num_columns + META_DATA_PAGES)
 
-        return curr_page_range.add_record(new_rid, col_list), new_rid
+        result = curr_page_range.add_record(new_rid, col_list), new_rid
+
+        # check if base_page_set is full, if so, add to dequeue
+        if not curr_page_range[next_free_base_page_set_index].has_capacity():
+            self.merge_handler.full_base_page_sets.append((next_free_page_range_index, next_free_base_page_set_index))
+            
+
+        return result
 
     def update_record(self, key, *columns):
         base_rid = self.keys[key]
-        page_range_index = self.page_directory[base_rid][0]
+        page_range_index, base_page_set_index = self.page_directory[base_rid]
         tail_rid = self.__get_next_tail_rid()
         if self.__tail_page_sets_full(page_range_index):
             tail_page_set_index = len(self.page_ranges[page_range_index].tail_page_sets)
@@ -222,7 +216,7 @@ class Table:
 
         self.merge_handler.dict_mutex.acquire()
         # append to base RID to a set of RIDs to merge, only do so after update is done, but why does it seem like this is running first?
-        self.merge_handler.rids_to_merge[base_rid] = tail_rid
+        self.outdated_offsets[base_rid] = (page_range_index, base_page_set_index)
         self.merge_handler.dict_mutex.release()
 
         return result

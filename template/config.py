@@ -14,6 +14,9 @@ BASE_RID_TYPE = 0
 TAIL_RID_TYPE = 1
 INVALID_RID_TYPE = 2
 BUFFER_POOL = Bufferpool()
+MERGE_TIMER_INTERVAL = 7 # every 7 seconds, the merge check will be called
+MERGE_THRESHOLD = 100 # how many base records out of a base page set must be updated to perform a merge
+NUMBER_OF_BASE_PAGE_SETS_TO_CHECK = 3 # at any given time, we will check 3 base page sets to merge
 
 
 def init():
