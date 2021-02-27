@@ -122,17 +122,17 @@ class Table:
 
     # IF HAVING ISSUES TO GET MERGES TO OCCUR, TRY ADJUSTING MERGE_TIMER_INTERVAL IN CONFIG.PY
     def __check_for_merge(self):
-        if len(self.merge_handler.rids_to_merge) != 0:
+        if len(self.merge_handler.outdated_offsets) != 0:
             # dictonaries will error out if their size changes during copy, so use a mutex for copying
             self.merge_handler.dict_mutex.acquire()
             rid_dict = copy.deepcopy(self.merge_handler.outdated_offsets)
             self.merge_handler.outdated_offsets.clear()
             self.merge_handler.dict_mutex.release()
 
-            for in range(NUMBER_OF_BASE_PAGE_SETS_TO_CHECK):
+            for _ in range(NUMBER_OF_BASE_PAGE_SETS_TO_CHECK):
                 # Compare offsets between full_base_page_sets and outdated_offsets to see if we have a sufficient amount of updates
                 curr_range, curr_base = self.merge_handler.full_base_page_sets.popleft()
-                if (rid_dict.values().count((curr_range, curr_base)) >= MERGE_THRESHOLD):
+                if list(rid_dict.values()).count((curr_range, curr_base)) >= MERGE_THRESHOLD:
                     # merge base_page_set
                     self.__merge(curr_range, curr_base)
 
@@ -187,7 +187,7 @@ class Table:
         result = curr_page_range.add_record(new_rid, col_list), new_rid
 
         # check if base_page_set is full, if so, add to dequeue
-        if not curr_page_range[next_free_base_page_set_index].has_capacity():
+        if not curr_page_range.base_page_sets[next_free_base_page_set_index].has_capacity():
             self.merge_handler.full_base_page_sets.append((next_free_page_range_index, next_free_base_page_set_index))
             
 
@@ -216,7 +216,7 @@ class Table:
 
         self.merge_handler.dict_mutex.acquire()
         # append to base RID to a set of RIDs to merge, only do so after update is done, but why does it seem like this is running first?
-        self.outdated_offsets[base_rid] = (page_range_index, base_page_set_index)
+        self.merge_handler.outdated_offsets[base_rid] = (page_range_index, base_page_set_index)
         self.merge_handler.dict_mutex.release()
 
         return result

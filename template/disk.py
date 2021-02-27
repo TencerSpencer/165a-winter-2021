@@ -92,7 +92,6 @@ class Disk:
             while True:
                 data = f.read(KEY_DIRECTORY_SET_SIZE)
                 if data:
-                    #self.next_key_directory_block += KEY_DIRECTORY_SET_SIZE
                     k = []
                     brids = []
                     trids = []
@@ -115,6 +114,8 @@ class Disk:
                             int.from_bytes(data[(PAGE_SIZE * 4) + (i * 8):(PAGE_SIZE * 4) + (i * 8) + 8],
                                            byteorder="little"))
 
+                    k, brids, trids, brid_block_starts, trid_block_starts = self.__cut_data_if_necessary(k, brids, trids, brid_block_starts, trid_block_starts)
+
                     for i in range(len(k)):
                         keys[k[i]] = brids[i]
                         brids_to_trids[brids[i]] = trids[i]
@@ -123,7 +124,25 @@ class Disk:
                 else:
                     break
 
+
         return keys, brids_to_trids, base_block_starts, tail_block_starts
+
+    def __cut_data_if_necessary(self, keys, brids, brids_to_trids, base_block_starts, tail_block_starts):
+        cutoff = -1
+        for i in range(RECORDS_PER_PAGE):
+            if brids[i] == 0:
+                if i != 0:
+                    cutoff = i
+                    break
+
+        if cutoff != -1:
+            keys = keys[0:cutoff]
+            brids = brids[0:cutoff]
+            brids_to_trids = brids_to_trids[0:cutoff]
+            base_block_starts = base_block_starts[0:cutoff]
+            tail_block_starts = tail_block_starts[0:cutoff]
+
+        return keys, brids, brids_to_trids, base_block_starts, tail_block_starts
 
     def write_key_directory_set(self, keys, brids_to_trids, base_block_starts, tail_block_starts):
         data = bytearray(0)
@@ -148,11 +167,15 @@ class Disk:
                 brids_bytes.append(byte)
 
         for num in trids:
-            for byte in int.to_bytes(tail_block_starts[num], length=8, byteorder="little"):
-                trid_block_starts_bytes.append(byte)
+            if num is None:
+                trid_block_starts_bytes.extend([0] * 8)
+                trids_bytes.extend([0] * 8)
+            else:
+                for byte in int.to_bytes(tail_block_starts[num], length=8, byteorder="little"):
+                    trid_block_starts_bytes.append(byte)
 
-            for byte in int.to_bytes(num, length=8, byteorder="little"):
-                trids_bytes.append(byte)
+                for byte in int.to_bytes(num, length=8, byteorder="little"):
+                    trids_bytes.append(byte)
 
         for num in brid_block_starts:
             for byte in int.to_bytes(num, length=8, byteorder="little"):
