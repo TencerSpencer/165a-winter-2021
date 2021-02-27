@@ -338,7 +338,7 @@ class Table:
         if set_type == BASE_RID_TYPE:
             rids = [k for k, v in page_range.base_rids.items() if v[0] == page_set_index]
             for i in range(len(rids)):
-                offset = page_range.tail_rids[rids[i]][1]
+                offset = page_range.base_rids[rids[i]][1]
                 timestamps.append(page_range.base_timestamps[offset])
                 schema.append(page_range.base_schema_encodings[offset])
                 temp = page_range.base_indirections[offset]
