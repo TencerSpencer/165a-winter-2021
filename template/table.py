@@ -239,6 +239,9 @@ class Table:
         tail_rid = self.brid_to_trid[rid]
         self.__check_if_tail_loaded(tail_rid, page_range_index)
 
+        if not self.page_ranges[page_range_index].is_valid(rid):  # check if rid has been invalidated
+            return False
+
         data = cur_page_range.get_record(rid, query_columns)
         return rid, data
 
@@ -256,7 +259,11 @@ class Table:
 
     def remove_record(self, key):
         if key in self.keys:
-            self.keys.pop(key)
+            brid = self.keys[key]
+            page_range_index, _ = self.page_directory[brid]
+            offset = self.page_ranges[page_range_index].base_rids[brid][1]
+            _, tail_rid = self.page_ranges[page_range_index].base_indirections[offset]
+            self.page_ranges[page_range_index].base_indirections[offset] = (INVALID_RID_TYPE, tail_rid)
             return True
 
         return False

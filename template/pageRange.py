@@ -296,3 +296,7 @@ class PageRange:
     # Keep this function public so that table can check if this page range is full or not
     def is_full(self):
         return not self.num_base_records < PAGE_SETS * RECORDS_PER_PAGE
+
+    def is_valid(self, rid):
+        offset = self.base_rids[rid][1]
+        return self.base_indirections[offset][0] != INVALID_RID_TYPE
