@@ -169,6 +169,10 @@ class Table:
         for rid in trids:
             self.trid_block_start[rid] = block_start_index
 
+
+
+    
+
     def insert_record(self, *columns):
         key_col = self.key
         new_rid = self.__get_next_base_rid()

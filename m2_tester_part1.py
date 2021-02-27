@@ -1,3 +1,5 @@
+import sys
+sys.path.append('./')
 from template.db import Database
 from template.query import Query
 from template.config import init

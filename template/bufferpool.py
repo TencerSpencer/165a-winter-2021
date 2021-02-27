@@ -81,6 +81,26 @@ class Bufferpool:
         # remove entry from dictionary
         self.pages_mem_mapping.pop((table_name, page_range_index, page_set_index))
 
+        # get the current table 
+        current_table = self.tables[table_name]
+        current_page_range = self.tables[table_name].page_ranges[page_range_index]
+
+        # remove its base rids from the page directory
+        if (set_type == 0):
+            base_rids = [k for k, v in current_table.page_directory.items() if v[0] == page_range_index and v[1] == page_set_index]
+            for i in range(len(base_rids)):
+                current_table.page_directory.pop(base_rids[i])
+                current_page_range.base_rids.pop(base_rids[i])
+                
+        # remove tail rids from respective base page set from page range area
+        if (set_type == 1):
+            tail_rids = [k for k, v in current_page_range.tail_rids.items() if v[0] == page_set_index]
+            for i in range(len(tail_rids)):
+                current_page_range.tail_rids.pop(tail_rids[i])
+
+
+
+       # self.tail_rids = {}  # key-value pairs: { rid : (page set index, offset) }
     # allocate new space for a page_set
     # assume meta data is packed
     def get_new_free_mem_space(self, table_name, page_range_index, page_set_index, num_columns, set_type):
