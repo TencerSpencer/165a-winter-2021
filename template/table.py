@@ -100,7 +100,7 @@ class Table:
 
             # if no base page set is full, do not perform a merge
             if len(self.merge_handler.full_base_page_sets) != 0:
-                # call _merge
+                # call __check_for_merge
                 self.merge_handler.thread_in_crit_section = True
                 self.__check_for_merge()
                 self.merge_handler.thread_in_crit_section = False
@@ -239,8 +239,8 @@ class Table:
         tail_rid = self.brid_to_trid[rid]
         self.__check_if_tail_loaded(tail_rid, page_range_index)
 
-        if not self.page_ranges[page_range_index].is_valid(rid):  # check if rid has been invalidated
-            return False
+        if not self.page_ranges[page_range_index].is_valid(rid):  # check if rid has been invalidated 
+            return False 
 
         data = cur_page_range.get_record(rid, query_columns)
         return rid, data
@@ -259,11 +259,11 @@ class Table:
 
     def remove_record(self, key):
         if key in self.keys:
-            brid = self.keys[key]
-            page_range_index, _ = self.page_directory[brid]
-            offset = self.page_ranges[page_range_index].base_rids[brid][1]
-            _, tail_rid = self.page_ranges[page_range_index].base_indirections[offset]
-            self.page_ranges[page_range_index].base_indirections[offset] = (INVALID_RID_TYPE, tail_rid)
+            brid = self.keys[key] 
+            page_range_index, _ = self.page_directory[brid] 
+            offset = self.page_ranges[page_range_index].base_rids[brid][1] 
+            _, tail_rid = self.page_ranges[page_range_index].base_indirections[offset] 
+            self.page_ranges[page_range_index].base_indirections[offset] = (INVALID_RID_TYPE, tail_rid) 
             return True
 
         return False
