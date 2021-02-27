@@ -120,7 +120,8 @@ class Bufferpool:
             table.disk.next_base_rid = table.next_base_rid
             table.disk.next_tail_rid = table.next_tail_rid
             table.disk.write_file_info()
-            table.disk.write_key_directory_set(table.keys, table.brid_block_start, table.trid_block_start)
+            table.disk.write_key_directory_set(table.keys, table.brid_to_trid, table.brid_block_start,
+                                               table.trid_block_start)
 
         self.dirty_page_sets = sorted(self.dirty_page_sets)
 

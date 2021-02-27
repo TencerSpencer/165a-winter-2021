@@ -57,8 +57,8 @@ class Table:
         self.num_columns = num_columns
         self.keys = {}  # key-value pairs { key : rid }
         self.brid_block_start = {}  # { base rid : block start index }
-        self.brid_to_trid = {}  # { base rid : latest tail rid }
         self.trid_block_start = {}  # { tail rid : block start index }
+        self.brid_to_trid = {}  # { base rid : latest tail rid }
         self.page_directory = {}  # key-value pairs { rid : (page range index, base page set index) }
         self.index = None
         self.next_base_rid = START_RID
@@ -80,14 +80,13 @@ class Table:
         data = cur_page_range.get_record(rid, query_columns)
         return rid, data
 
-    def __load_record_from_disk(self, rid, set_type):
+    def __load_record_from_disk(self, rid, page_range_index, set_type):
         block_start_index = self.brid_block_start[rid] if set_type == BASE_RID_TYPE else self.trid_block_start[rid]
-        page_set_index = block_start_index // (self.num_columns + META_DATA_PAGES)
-        page_range_index = page_set_index // PAGE_SETS
-        data = BUFFER_POOL.get_page_set(self.name, self.num_columns, self.disk, page_range_index, page_set_index,
-                                        set_type, block_start_index)
 
         if set_type == BASE_RID_TYPE:
+            page_set_index = block_start_index // (self.num_columns + META_DATA_PAGES)
+            data = BUFFER_POOL.get_page_set(self.name, self.num_columns, self.disk, page_range_index, page_set_index,
+                                            set_type, block_start_index)
             page_set, brids, times, schema, indir, indir_t = Bufferpool.unpack_data(data)
             if not self.page_ranges.get(page_range_index):  # check if page range exists
                 self.page_ranges[page_range_index] = PageRange(self.num_columns)
@@ -96,6 +95,9 @@ class Table:
             self.page_ranges[page_range_index].add_base_page_set_from_disk(page_set, page_set_index, brids,
                                                                            times, schema, indir, indir_t)
         else:
+            page_set_index = len(self.page_ranges[page_range_index].tail_page_sets)
+            data = BUFFER_POOL.get_page_set(self.name, self.num_columns, self.disk, page_range_index, page_set_index,
+                                            set_type, block_start_index)
             page_set, trids, times, schema, indir, indir_t = Bufferpool.unpack_data(data)
             # this implementation will first be in mem
             self.page_ranges[page_range_index].add_tail_page_set_from_disk(page_set, page_set_index, trids,
@@ -167,7 +169,7 @@ class Table:
     def __add_brids_to_page_directory(self, brids, indir, indir_t, page_range_index, page_set_index):
         for i in range(len(brids)):
             self.page_directory[brids[i]] = (page_range_index, page_set_index)
-            if indir_t[i] == BASE_RID_TYPE:
+            if indir_t[i] == TAIL_RID_TYPE:
                 self.brid_to_trid[brids[i]] = indir[i]
             else:
                 self.brid_to_trid[brids[i]] = None
@@ -192,7 +194,9 @@ class Table:
         BUFFER_POOL.mark_as_dirty(self.name, next_free_page_range_index, next_free_base_page_set_index, BASE_RID_TYPE)
 
         # update key directory data for base
-        self.update_key_directory_data_for_base(new_rid, None)
+        self.brid_to_trid[new_rid] = None
+        self.brid_block_start[new_rid] = (new_rid // RECORDS_PER_PAGE) * (self.num_columns + META_DATA_PAGES)
+
         return curr_page_range.add_record(new_rid, col_list), new_rid
 
     def update_record(self, key, *columns):
@@ -205,6 +209,7 @@ class Table:
                 BUFFER_POOL.get_new_free_mem_space(self.name, page_range_index, tail_page_set_index, self.num_columns,
                                                    TAIL_RID_TYPE))
             self.page_ranges[page_range_index].tail_page_sets[tail_page_set_index] = page_set
+
         tail_page_set_index = self.page_ranges[page_range_index].get_next_free_tail_page_set()
         result = self.page_ranges[page_range_index].update_record(base_rid, tail_rid, columns)
 
@@ -212,7 +217,8 @@ class Table:
         BUFFER_POOL.mark_as_dirty(self.name, page_range_index, tail_page_set_index, TAIL_RID_TYPE)
 
         # update key directory data for tail
-        self.update_key_directory_data_for_tail(tail_rid, base_rid)
+        self.brid_to_trid[base_rid] = tail_rid
+        self.trid_block_start[tail_rid] = (tail_rid // RECORDS_PER_PAGE) * (self.num_columns + META_DATA_PAGES)
 
         self.merge_handler.dict_mutex.acquire()
         # append to base RID to a set of RIDs to merge, only do so after update is done, but why does it seem like this is running first?
@@ -243,18 +249,20 @@ class Table:
         return rid, data
 
     def __check_if_base_loaded(self, rid):
-            if not self.page_directory.get(rid):
-                self.__load_record_from_disk(rid, BASE_RID_TYPE)
+            page_dir_info = self.page_directory.get(rid)
+            if not page_dir_info:
+                page_range_index = self.brid_to_trid[rid] // (self.num_columns + META_DATA_PAGES)
+                self.__load_record_from_disk(rid, page_range_index, BASE_RID_TYPE)
 
     def __check_if_tail_loaded(self, rid, page_range_index):
         # check if tail page page set needs to be loaded
         if rid:
             if not self.page_ranges[page_range_index].tail_rids.get(rid):
-                self.__load_record_from_disk(rid, TAIL_RID_TYPE)
+                self.__load_record_from_disk(rid, page_range_index, TAIL_RID_TYPE)
 
     def remove_record(self, key):
         if key in self.keys:
-            # self.keys.pop(key)
+            self.keys.pop(key)
             return True
 
         return False
@@ -324,14 +332,3 @@ class Table:
                 indir_t.append(temp[0])
 
         return rids, timestamps, schema, indir, indir_t
-
-    def update_key_directory_data_for_base(self, brid, trid):
-        brid_info = self.page_directory[brid]
-        page_range_index = brid_info[0]
-        base_page_set_index = brid_info[1]
-        self.brid_block_start[brid] = self.disk.get_next_base_block()
-        self.brid_to_trid[brid] = trid
-
-    def update_key_directory_data_for_tail(self, trid, brid):
-        self.brid_to_trid[brid] = trid
-        self.trid_block_start[trid] = self.disk.get_next_tail_block()

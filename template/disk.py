@@ -14,7 +14,6 @@ class Disk:
         self.tail_fn = os.path.join(self.table_dir, table_name + ".tail")
         self.info_fn = os.path.join(self.table_dir, table_name + ".info")
         self.key_directory = os.path.join(self.table_dir, table_name + ".kd")
-        #self.next_key_directory_block = 0
         self.next_base_block = 0
         self.next_tail_block = 0
         if not self.__files_exist():
@@ -71,17 +70,22 @@ class Disk:
             f.write(int.to_bytes(self.next_tail_block, length=8, byteorder="little"))
 
     def read_table(self):
-        keys, base_block_start, tail_block_starts = self.read_key_directory_data()
+        keys, brids_to_trids, base_block_start, tail_block_starts = self.read_key_directory_data()
         table = Table(self.fn, self.num_columns, self.key_column)
         table.next_base_rid = self.next_base_rid
         table.next_tail_rid = self.next_tail_rid
         table.keys = keys
+        table.brid_to_trid = brids_to_trids
         table.brid_block_start = base_block_start
         table.trid_block_start = tail_block_starts
+        table.disk = self
+        table.next_base_rid = self.next_base_rid
+        table.next_tail_rid = self.next_tail_rid
         return table
 
     def read_key_directory_data(self):
         keys = {}
+        brids_to_trids = {}
         base_block_starts = {}
         tail_block_starts = {}
         with open(self.key_directory, "rb") as f:
@@ -96,38 +100,42 @@ class Disk:
                     trid_block_starts = []
                     for i in range(RECORDS_PER_PAGE):
                         k.append(int.from_bytes(data[(i * 8):(i * 8) + 8], byteorder="little"))
+
                         brids.append(
                             int.from_bytes(data[PAGE_SIZE + (i * 8):PAGE_SIZE + (i * 8) + 8], byteorder="little"))
+
                         trids.append(int.from_bytes(data[(PAGE_SIZE * 2) + (i * 8):(PAGE_SIZE * 2) + (i * 8) + 8],
                                                     byteorder="little"))
+
                         brid_block_starts.append(
                             int.from_bytes(data[(PAGE_SIZE * 3) + (i * 8):(PAGE_SIZE * 3) + (i * 8) + 8],
                                            byteorder="little"))
+
                         trid_block_starts.append(
                             int.from_bytes(data[(PAGE_SIZE * 4) + (i * 8):(PAGE_SIZE * 4) + (i * 8) + 8],
                                            byteorder="little"))
 
                     for i in range(len(k)):
                         keys[k[i]] = brids[i]
+                        brids_to_trids[brids[i]] = trids[i]
                         base_block_starts[brids[i]] = brid_block_starts[i]
                         tail_block_starts[trids[i]] = trid_block_starts[i]
                 else:
                     break
 
-        return keys, base_block_starts, tail_block_starts
+        return keys, brids_to_trids, base_block_starts, tail_block_starts
 
-    def write_key_directory_set(self, keys, base_block_starts, tail_block_starts):
+    def write_key_directory_set(self, keys, brids_to_trids, base_block_starts, tail_block_starts):
         data = bytearray(0)
         k = list(keys.keys())
         brids = list(keys.values())
+        trids = list(brids_to_trids.values())
         brid_block_starts = list(base_block_starts.values())
-        trids = list(tail_block_starts.keys())
-        trid_block_starts = list(tail_block_starts.values())
 
         k_bytes = []
         brids_bytes = []
-        brid_block_starts_bytes = []
         trids_bytes = []
+        brid_block_starts_bytes = []
         trid_block_starts_bytes = []
 
         # convert 64 bit integers into bytes
@@ -140,16 +148,15 @@ class Disk:
                 brids_bytes.append(byte)
 
         for num in trids:
+            for byte in int.to_bytes(tail_block_starts[num], length=8, byteorder="little"):
+                trid_block_starts_bytes.append(byte)
+
             for byte in int.to_bytes(num, length=8, byteorder="little"):
                 trids_bytes.append(byte)
 
         for num in brid_block_starts:
             for byte in int.to_bytes(num, length=8, byteorder="little"):
                 brid_block_starts_bytes.append(byte)
-
-        for num in trid_block_starts:
-            for byte in int.to_bytes(num, length=8, byteorder="little"):
-                trid_block_starts_bytes.append(byte)
 
         # append bytes to data properly
         key_directory_sets_count = math.ceil((len(k) // RECORDS_PER_PAGE) + 1) if \

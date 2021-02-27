@@ -22,6 +22,8 @@ class PageRange:
         self.tail_timestamps = {}
 
     def add_base_page_set_from_disk(self, page_set, page_set_index, brids, times, schema, indir, indir_t):
+        self.num_base_records += len(brids)
+
         self.base_page_sets[page_set_index] = page_set
 
         base_rids = {}
@@ -30,10 +32,11 @@ class PageRange:
         base_indirections = {}
 
         for i in range(len(brids)):
-            base_rids[brids[i]] = (page_set_index, (page_set_index * PAGE_SIZE) + i)
-            base_timestamps[brids[i]] = times[i]
-            base_schema_encodings[brids[i]] = schema[i]
-            base_indirections[brids[i]] = (indir_t[i], indir[i])
+            internal_offset = brids[i] % (RECORDS_PER_PAGE * PAGE_SETS)
+            base_rids[brids[i]] = (page_set_index, internal_offset)
+            base_timestamps[internal_offset] = times[i]
+            base_schema_encodings[internal_offset] = schema[i]
+            base_indirections[internal_offset] = (indir_t[i], indir[i])
 
         self.base_rids.update(base_rids)
         self.base_timestamps.update(base_timestamps)
@@ -41,6 +44,8 @@ class PageRange:
         self.base_indirections.update(base_indirections)
 
     def add_tail_page_set_from_disk(self, page_set, page_set_index, trids, times, schema, indir, indir_t):
+        self.num_tail_records += len(trids)
+
         self.tail_page_sets[page_set_index] = page_set
 
         tail_rids = {}
@@ -49,10 +54,11 @@ class PageRange:
         tail_indirections = {}
 
         for i in range(len(trids)):
-            tail_rids[trids[i]] = (page_set_index, (page_set_index * PAGE_SIZE) + i)
-            tail_timestamps[trids[i]] = times[i]
-            tail_schema_encodings[trids[i]] = schema[i]
-            tail_indirections[trids[i]] = (indir_t[i], indir[i])
+            internal_offset = trids[i] % (RECORDS_PER_PAGE * PAGE_SETS)
+            tail_rids[trids[i]] = (page_set_index, internal_offset)
+            tail_timestamps[internal_offset] = times[i]
+            tail_schema_encodings[internal_offset] = schema[i]
+            tail_indirections[internal_offset] = (indir_t[i], indir[i])
 
         self.tail_rids.update(tail_rids)
         self.tail_timestamps.update(tail_timestamps)
