@@ -148,7 +148,7 @@ class PageRange:
     def remove_record(self, rid):
         self.base_rids.pop(rid)
 
-    def update_record(self, base_rid, tail_rid, columns):
+    def update_record(self, base_rid, tail_rid, columns, tail_page_set_index):
         # get previous tail rid
         prev_base_indirection = self.__get_indirection(base_rid)
         prev_tail_rid = prev_base_indirection[1]
@@ -179,7 +179,7 @@ class PageRange:
         # write new tail with new schema and previous tails rid
         self.__write_tail_record(tail_rid, new_schema,
                                  (0, prev_tail_rid) if prev_tail_rid == (None, None) else (1, prev_tail_rid),
-                                 new_columns)
+                                 new_columns, tail_page_set_index)
 
         return True
 
@@ -227,7 +227,7 @@ class PageRange:
         # To convert from milliseconds to date/time, https://stackoverflow.com/questions/748491/how-do-i-create-a-datetime-in-python-from-milliseconds
         self.base_timestamps[offset] = int(round(time.time() * 1000))
 
-    def __write_tail_record(self, rid, schema, indirection, columns):
+    def __write_tail_record(self, rid, schema, indirection, columns, tail_page_set_index):
         # if self.__tail_page_sets_full():
         # self.tail_page_sets[len(self.tail_page_sets)] = BUFFER_POOL.get_new_free_mem_space()
 

@@ -231,9 +231,10 @@ class Table:
                 BUFFER_POOL.get_new_free_mem_space(self.name, page_range_index, tail_page_set_index, self.num_columns,
                                                    TAIL_RID_TYPE))
             self.page_ranges[page_range_index].tail_page_sets[tail_page_set_index] = page_set
-
-        tail_page_set_index = self.page_ranges[page_range_index].get_next_free_tail_page_set()
-        result = self.page_ranges[page_range_index].update_record(base_rid, new_tail_rid, columns)
+        else:
+            tail_page_set_index = self.page_ranges[page_range_index].get_next_free_tail_page_set()
+        
+        result = self.page_ranges[page_range_index].update_record(base_rid, new_tail_rid, columns , tail_page_set_index)
 
         # mark tail page set as dirty
         BUFFER_POOL.mark_as_dirty(self.name, page_range_index, base_page_set_index, BASE_RID_TYPE)
