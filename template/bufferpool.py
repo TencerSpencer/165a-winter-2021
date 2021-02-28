@@ -74,7 +74,7 @@ class Bufferpool:
 
     # evaluate if page is dirty then remove any traces
     def __evict_page_set(self, table_name, page_range_index, page_set_index, set_type):
-        if self.__is_dirty(table_name, page_range_index, page_set_index):
+        if self.__is_dirty(table_name, page_range_index, page_set_index, set_type):
             meta = self.tables[table_name].get_meta_data(page_range_index, page_set_index, set_type)
             self.__write_to_disk(table_name, page_range_index, page_set_index, set_type, meta)
 
@@ -124,8 +124,8 @@ class Bufferpool:
             # increase the amount of users using the page, for M3 safe keeping
             self.pinned_page_sets[(table_name, page_range_index, page_set_index, set_type)] += 1
 
-    def __is_dirty(self, table_name, page_range_index, page_set_index):
-        return table_name, page_range_index, page_set_index in self.dirty_page_sets
+    def __is_dirty(self, table_name, page_range_index, page_set_index, set_type):
+        return (table_name, page_range_index, page_set_index, set_type) in self.dirty_page_sets
 
     # called from table when the ref counter needs to be dec/removed
     def unpin_page_set(self, table_name, page_range_index, page_set_index, set_type):
