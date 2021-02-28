@@ -92,6 +92,11 @@ class Bufferpool:
         current_table = self.tables[table_name]
         current_page_range = self.tables[table_name].page_ranges[page_range_index]
 
+        try:
+            current_table.merge_handler.full_base_page_sets.remove((page_range_index, page_set_index))
+        except ValueError:
+            pass
+
         # remove its base rids from the page directory
         if (set_type == 0):
             base_rids = [k for k, v in current_table.page_directory.items() if v[0] == page_range_index and v[1] == page_set_index]

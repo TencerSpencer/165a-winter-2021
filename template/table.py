@@ -148,7 +148,7 @@ class Table:
 
     def __merge(self, page_range_index, base_page_set_index):
         page_range = self.page_ranges[page_range_index]
-        base_page_set = copy.deepcopy(page_range.base_page_sets[base_page_set_index])
+        #base_page_set = copy.deepcopy(page_range.base_page_sets[base_page_set_index])
         brids = [k for k, v in self.page_directory.items() if v[0] == page_range_index and v[1] == base_page_set_index]
         self.__check_if_base_loaded(brids[0])  # just need first one since all brids are in same page set
         for i in range(len(brids)):
@@ -157,8 +157,8 @@ class Table:
                 tail_rid = page_range.base_indirections[offset][1]
                 self.__check_if_tail_loaded(tail_rid, page_range_index)
                 data = page_range.get_record_with_specific_tail(brids[i], tail_rid, [1] * self.num_columns)
-                base_page_set.overwrite_base_record(data, offset)
-        page_range.base_page_sets[base_page_set_index] = base_page_set
+                page_range.base_page_sets[base_page_set_index].overwrite_base_record(data, offset)
+       # page_range.base_page_sets[base_page_set_index] = base_page_set
 
     def __add_brids_to_page_directory(self, brids, indir, indir_t, page_range_index, page_set_index):
         for i in range(len(brids)):
@@ -275,7 +275,7 @@ class Table:
         cur_page_range = self.page_ranges[page_range_index]
 
         tail_rid = self.brid_to_trid[brid]
-        if tail_rid:
+        if tail_rid is not None:
             self.__check_if_tail_loaded(tail_rid, page_range_index)
             tail_page_set_index = cur_page_range.tail_rids.get(tail_rid)[0]
             BUFFER_POOL.pin_page_set(self.name, page_range_index, tail_page_set_index, TAIL_RID_TYPE)
