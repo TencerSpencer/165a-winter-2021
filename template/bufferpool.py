@@ -117,7 +117,7 @@ class Bufferpool:
 
     def pin_page_set(self, table_name, page_range_index, page_set_index, set_type):
         # start at zero and build up
-        if self.pinned_page_sets.get((table_name, page_range_index, page_set_index, set_type)):
+        if not self.pinned_page_sets.get((table_name, page_range_index, page_set_index, set_type)):
             # add pair with 1 to indicate we just started pinning
             self.pinned_page_sets[(table_name, page_range_index, page_set_index, set_type)] = 1
         else:
