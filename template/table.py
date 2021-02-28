@@ -78,7 +78,7 @@ class Table:
             data = BUFFER_POOL.get_page_set(self.name, self.num_columns, self.disk, page_range_index, page_set_index,
                                             set_type, block_start_index)
             page_set, brids, times, schema, indir, indir_t = Bufferpool.unpack_data(data)
-            if not self.page_ranges.get(page_range_index):  # check if page range exists
+            if self.page_ranges.get(page_range_index) == None:  # check if page range exists
                 self.page_ranges[page_range_index] = PageRange(self.num_columns)
 
             self.__add_brids_to_page_directory(brids, indir, indir_t, page_range_index, page_set_index)
@@ -200,7 +200,7 @@ class Table:
         self.brid_to_trid[new_rid] = None
         self.brid_block_start[new_rid] = (new_rid // RECORDS_PER_PAGE) * (self.num_columns + META_DATA_PAGES)
 
-        result = curr_page_range.add_record(new_rid, col_list), new_rid
+        result = curr_page_range.add_record(new_rid, col_list, next_free_base_page_set_index), new_rid
 
         # check if base_page_set is full, if so, add to dequeue
         if not curr_page_range.base_page_sets[next_free_base_page_set_index].has_capacity():
@@ -351,9 +351,9 @@ class Table:
             new_page_range = PageRange(self.num_columns)
             for i in range(PAGE_SETS):
                 page_set, _, _, _, _, _ = Bufferpool.unpack_data(
-                    BUFFER_POOL.get_new_free_mem_space(self.name, 0, i, self.num_columns, BASE_RID_TYPE))
+                    BUFFER_POOL.get_new_free_mem_space(self.name, page_range_index, i, self.num_columns, BASE_RID_TYPE))
                 new_page_range.base_page_sets[i] = page_set
-            page_range_index = new_rid // (RECORDS_PER_PAGE * PAGE_SETS)
+            #page_range_index = new_rid // (RECORDS_PER_PAGE * PAGE_SETS)
             self.page_ranges[page_range_index] = new_page_range
         return page_range_index
 
