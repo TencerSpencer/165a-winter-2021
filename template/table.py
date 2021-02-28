@@ -30,6 +30,9 @@ class MergeHandler:
         # dict of base RID to offset in old copy of base record
         self.outdated_offsets = {}  # {base RID : page_range_offset, base_page_set_offset}
 
+        # no merge if update is occurring to prevent contention
+        self.update_occurring = False
+
         # create background proc thread
         self.thread = None
 
@@ -100,7 +103,7 @@ class Table:
         if not self.merge_handler.thread_stopped:
 
             # if no base page set is full, do not perform a merge
-            if len(self.merge_handler.full_base_page_sets) != 0:
+            if len(self.merge_handler.full_base_page_sets) != 0 & self.merge_handler.update_occurring == False:
                 # call __check_for_merge
                 self.merge_handler.thread_in_crit_section = True
                 self.__check_for_merge()
@@ -125,10 +128,10 @@ class Table:
     def __check_for_merge(self):
         if len(self.merge_handler.outdated_offsets) != 0:
             # dictonaries will error out if their size changes during copy, so use a mutex for copying
-            self.merge_handler.dict_mutex.acquire()
+          #  self.merge_handler.dict_mutex.acquire()
             rid_dict = copy.deepcopy(self.merge_handler.outdated_offsets)
             self.merge_handler.outdated_offsets.clear()
-            self.merge_handler.dict_mutex.release()
+           # self.merge_handler.dict_mutex.release()
 
             check_num = NUMBER_OF_BASE_PAGE_SETS_TO_CHECK if len(self.merge_handler.full_base_page_sets) >= 3 else len(
                 self.merge_handler.full_base_page_sets)
@@ -206,6 +209,8 @@ class Table:
         return result
 
     def update_record(self, key, *columns):
+        self.update_occurring = True
+        
         base_rid = self.keys[key]
         self.__check_if_base_loaded(base_rid)
 
@@ -230,11 +235,10 @@ class Table:
         self.brid_to_trid[base_rid] = tail_rid
         self.trid_block_start[tail_rid] = (tail_rid // RECORDS_PER_PAGE) * (self.num_columns + META_DATA_PAGES)
 
-        self.merge_handler.dict_mutex.acquire()
         # append to base RID to a set of RIDs to merge, only do so after update is done, but why does it seem like this is running first?
         self.merge_handler.outdated_offsets[base_rid] = (page_range_index, base_page_set_index)
-        self.merge_handler.dict_mutex.release()
 
+        self.update_occurring = False
         return result
 
     def __tail_page_sets_full(self, page_range_index):
