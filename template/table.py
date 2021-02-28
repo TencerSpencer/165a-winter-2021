@@ -229,12 +229,9 @@ class Table:
         tail_rid = self.brid_to_trid[base_rid]
         if tail_rid is not None:         
             self.__check_if_tail_loaded(tail_rid, page_range_index)
+            tail_rid = self.brid_to_trid[base_rid]
         new_tail_rid = self.__get_next_tail_rid()
         
-        
-        current_tail_page_set = self.page_ranges[page_range_index].tail_rids.get(tail_rid)[0]
-
-
 
         if self.__tail_page_sets_full(page_range_index):
             tail_page_set_index = len(self.page_ranges[page_range_index].tail_page_sets)
@@ -251,11 +248,13 @@ class Table:
         # pin new tail
         BUFFER_POOL.pin_page_set(self.name, page_range_index, tail_page_set_index, TAIL_RID_TYPE)
         BUFFER_POOL.pin_page_set(self.name, page_range_index, tail_page_set_index, TAIL_RID_TYPE)
-        BUFFER_POOL.pin_page_set(self.name, page_range_index, current_tail_page_set, TAIL_RID_TYPE)
+        if tail_rid is not None:
+            current_tail_page_set = self.page_ranges[page_range_index].tail_rids.get(tail_rid)[0]
+            BUFFER_POOL.pin_page_set(self.name, page_range_index, current_tail_page_set, TAIL_RID_TYPE)
 
         # update key directory data for tail
-        self.brid_to_trid[base_rid] = tail_rid
-        self.trid_block_start[tail_rid] = (tail_rid // RECORDS_PER_PAGE) * (self.num_columns + META_DATA_PAGES)
+        self.brid_to_trid[base_rid] = new_tail_rid
+        self.trid_block_start[new_tail_rid] = (new_tail_rid // RECORDS_PER_PAGE) * (self.num_columns + META_DATA_PAGES)
 
         # append to base RID to a set of RIDs to merge, only do so after update is done, but why does it seem like this is running first?
         self.merge_handler.outdated_offsets[base_rid] = (page_range_index, base_page_set_index)
@@ -263,7 +262,8 @@ class Table:
         # unpin everything
         BUFFER_POOL.unpin_page_set(self.name, page_range_index, base_page_set_index, BASE_RID_TYPE)
         BUFFER_POOL.unpin_page_set(self.name, page_range_index, tail_page_set_index, TAIL_RID_TYPE)
-        BUFFER_POOL.unpin_page_set(self.name, page_range_index, current_tail_page_set, TAIL_RID_TYPE)
+        if tail_rid is not None:
+           BUFFER_POOL.unpin_page_set(self.name, page_range_index, current_tail_page_set, TAIL_RID_TYPE)
        
         
 
