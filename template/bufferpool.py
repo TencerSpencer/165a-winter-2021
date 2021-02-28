@@ -76,7 +76,7 @@ class Bufferpool:
     def __evict_page_set(self, table_name, page_range_index, page_set_index, set_type):
         if self.__is_dirty(table_name, page_range_index, page_set_index):
             meta = self.tables[table_name].get_meta_data(page_range_index, page_set_index, set_type)
-            self.__write_to_disk(page_range_index, page_set_index, table_name, set_type, meta)
+            self.__write_to_disk(table_name, page_range_index, page_set_index, set_type, meta)
 
         # remove entry from dictionary
         self.pages_mem_mapping.pop((table_name, page_range_index, page_set_index))
