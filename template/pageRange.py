@@ -228,6 +228,7 @@ class PageRange:
         tail_page_set = self.tail_page_sets[tail_page_set_index]
 
         # write data
+        internal_offset = tail_page_set.pages[0].num_records
         for i in range(self.num_columns):
             if columns[i] is not None:
                 tail_page_set.pages[i].write(columns[i])
@@ -235,7 +236,7 @@ class PageRange:
                 tail_page_set.pages[i].write(0)  # make sure each tail page is synced with one another
 
         # add key-value pair to base_rids where key is the rid and the value is the record offset
-        self.tail_rids[rid] = (tail_page_set_index, self.num_tail_records)
+        self.tail_rids[rid] = (tail_page_set_index, internal_offset + (RECORDS_PER_PAGE * tail_page_set_index))
         tail_record_offset = self.tail_rids[rid][1]
 
         self.tail_schema_encodings[tail_record_offset] = schema

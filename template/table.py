@@ -221,7 +221,7 @@ class Table:
         self.brid_to_trid[new_rid] = None
         self.brid_block_start[new_rid] = (new_rid // RECORDS_PER_PAGE) * (self.num_columns + META_DATA_PAGES)
 
-        result = curr_page_range.add_record(new_rid, col_list), new_rid
+        result = curr_page_range.add_record(new_rid, col_list, next_free_base_page_set_index), new_rid
 
         # check if base_page_set is full, if so, add to dequeue
         if not curr_page_range.base_page_sets[next_free_base_page_set_index].has_capacity():
