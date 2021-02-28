@@ -372,7 +372,7 @@ class Table:
             new_page_range = PageRange(self.num_columns)
             for i in range(PAGE_SETS):
                 page_set, _, _, _, _, _ = Bufferpool.unpack_data(
-                    BUFFER_POOL.get_new_free_mem_space(self.name, 0, i, self.num_columns, BASE_RID_TYPE))
+                    BUFFER_POOL.get_new_free_mem_space(self.name, page_range_index, i, self.num_columns, BASE_RID_TYPE))
                 new_page_range.base_page_sets[i] = page_set
             page_range_index = new_rid // (RECORDS_PER_PAGE * PAGE_SETS)
             self.page_ranges[page_range_index] = new_page_range

@@ -222,9 +222,6 @@ class PageRange:
         self.base_timestamps[offset] = int(round(time.time() * 1000))
 
     def __write_tail_record(self, rid, schema, indirection, columns, tail_page_set_index):
-        # if self.__tail_page_sets_full():
-        # self.tail_page_sets[len(self.tail_page_sets)] = BUFFER_POOL.get_new_free_mem_space()
-
         tail_page_set = self.tail_page_sets[tail_page_set_index]
 
         # write data
