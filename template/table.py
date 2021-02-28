@@ -229,9 +229,10 @@ class Table:
         tail_rid = self.brid_to_trid[base_rid]
         if tail_rid is not None:         
             self.__check_if_tail_loaded(tail_rid, page_range_index)
-          #  current_tail_page_set = self.page_ranges[page_range_index].tail_rids.get(tail_rid)[0]
-        else:
-            tail_rid = self.__get_next_tail_rid()
+        new_tail_rid = self.__get_next_tail_rid()
+        
+        
+        current_tail_page_set = self.page_ranges[page_range_index].tail_rids.get(tail_rid)[0]
 
 
 
@@ -243,12 +244,14 @@ class Table:
             self.page_ranges[page_range_index].tail_page_sets[tail_page_set_index] = page_set
 
         tail_page_set_index = self.page_ranges[page_range_index].get_next_free_tail_page_set()
-        result = self.page_ranges[page_range_index].update_record(base_rid, tail_rid, columns)
+        result = self.page_ranges[page_range_index].update_record(base_rid, new_tail_rid, columns)
 
         # mark tail page set as dirty
         BUFFER_POOL.mark_as_dirty(self.name, page_range_index, tail_page_set_index, TAIL_RID_TYPE)
         # pin new tail
         BUFFER_POOL.pin_page_set(self.name, page_range_index, tail_page_set_index, TAIL_RID_TYPE)
+        BUFFER_POOL.pin_page_set(self.name, page_range_index, tail_page_set_index, TAIL_RID_TYPE)
+        BUFFER_POOL.pin_page_set(self.name, page_range_index, current_tail_page_set, TAIL_RID_TYPE)
 
         # update key directory data for tail
         self.brid_to_trid[base_rid] = tail_rid
@@ -260,6 +263,7 @@ class Table:
         # unpin everything
         BUFFER_POOL.unpin_page_set(self.name, page_range_index, base_page_set_index, BASE_RID_TYPE)
         BUFFER_POOL.unpin_page_set(self.name, page_range_index, tail_page_set_index, TAIL_RID_TYPE)
+        BUFFER_POOL.unpin_page_set(self.name, page_range_index, current_tail_page_set, TAIL_RID_TYPE)
        
         
 
