@@ -63,7 +63,7 @@ class Bufferpool:
             table_name, page_range_index, page_set_index, set_type = self.lru_enforcement.popleft()
 
             # page is currently pinned and we cannot evict it
-            if self.pinned_page_sets[(table_name, page_range_index, page_set_index, set_type)] != 0:
+            if self.pinned_page_sets.get((table_name, page_range_index, page_set_index, set_type)) != None:
                 # page is currently in use and cannot be evicted
                 # add it back to the queue
                 self.lru_enforcement.append((table_name, page_range_index, page_set_index, set_type))
@@ -75,7 +75,7 @@ class Bufferpool:
     # evaluate if page is dirty then remove any traces
     def __evict_page_set(self, table_name, page_range_index, page_set_index, set_type):
         if self.__is_dirty(table_name, page_range_index, page_set_index):
-            meta = self.tables[table_name].__get_meta_data(page_range_index, page_set_index, set_type)
+            meta = self.tables[table_name].get_meta_data(page_range_index, page_set_index, set_type)
             self.__write_to_disk(page_range_index, page_set_index, table_name, set_type, meta)
 
         # remove entry from dictionary
@@ -118,7 +118,7 @@ class Bufferpool:
     def pin_page_set(self, table_name, page_range_index, page_set_index, set_type):
         # start at zero and build up
         if not self.pinned_page_sets.get((table_name, page_range_index, page_set_index, set_type)):
-            # add pair with 1 to indicate we just started pinning
+             # add pair with 1 to indicate we just started pinning
             self.pinned_page_sets[(table_name, page_range_index, page_set_index, set_type)] = 1
         else:
             # increase the amount of users using the page, for M3 safe keeping
@@ -133,7 +133,7 @@ class Bufferpool:
         self.pinned_page_sets[(table_name, page_range_index, page_set_index, set_type)] -= 1
 
         # if the page is no longer in use, remove it from the mapping, in m3 we may decide to keep it
-        if self.pinned_page_sets[(table_name, page_range_index, page_set_index, set_type)] == 0:
+        if self.pinned_page_sets.get((table_name, page_range_index, page_set_index, set_type)) == 0:
             self.pinned_page_sets.pop((table_name, page_range_index, page_set_index, set_type))
 
     # write dirty data to disk
