@@ -65,9 +65,30 @@ class Table:
         self.index = index
 
     def select_record_using_rid(self, rid, query_columns):
+        self.__check_if_base_loaded(rid)
         page_range_index = self.page_directory[rid][0]
         cur_page_range = self.page_ranges[page_range_index]
+
+        tail_rid = self.brid_to_trid[rid]
+        if tail_rid is not None:
+            self.__check_if_tail_loaded(tail_rid, page_range_index)
+            tail_page_set_index = cur_page_range.tail_rids.get(tail_rid)[0]
+            BUFFER_POOL.pin_page_set(self.name, page_range_index, tail_page_set_index, TAIL_RID_TYPE)
+
+        if not self.page_ranges[page_range_index].is_valid(rid):  # check if brid has been invalidated
+            return False
+
+            # get base page sets,
+        base_page_set_index = cur_page_range.base_rids.get(rid)[0]
+
+        BUFFER_POOL.pin_page_set(self.name, page_range_index, base_page_set_index, BASE_RID_TYPE)
+
         data = cur_page_range.get_record(rid, query_columns)
+
+        BUFFER_POOL.unpin_page_set(self.name, page_range_index, base_page_set_index, BASE_RID_TYPE)
+        if tail_rid is not None:
+            BUFFER_POOL.unpin_page_set(self.name, page_range_index, tail_page_set_index, TAIL_RID_TYPE)
+
         return rid, data
 
     def __load_record_from_disk(self, rid, page_range_index, set_type):
@@ -78,7 +99,7 @@ class Table:
             data = BUFFER_POOL.get_page_set(self.name, self.num_columns, self.disk, page_range_index, page_set_index,
                                             set_type, block_start_index)
             page_set, brids, times, schema, indir, indir_t = Bufferpool.unpack_data(data)
-            if not self.page_ranges.get(page_range_index):  # check if page range exists
+            if self.page_ranges.get(page_range_index) is None:  # check if page range exists
                 self.page_ranges[page_range_index] = PageRange(self.num_columns)
 
             self.__add_brids_to_page_directory(brids, indir, indir_t, page_range_index, page_set_index)
