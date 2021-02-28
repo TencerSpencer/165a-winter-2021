@@ -99,16 +99,26 @@ class Bufferpool:
 
         # remove its base rids from the page directory
         if (set_type == 0):
-            base_rids = [k for k, v in current_table.page_directory.items() if v[0] == page_range_index and v[1] == page_set_index]
-            for i in range(len(base_rids)):
-                current_table.page_directory.pop(base_rids[i])
-                current_page_range.base_rids.pop(base_rids[i])
+            rids = [k for k, v in current_table.page_directory.items() if v[0] == page_range_index and v[1] == page_set_index]
+            for i in range(len(rids)):
+                offset = current_page_range.base_rids[rids[i]][1]
+                current_table.page_directory.pop(rids[i])
+                current_page_range.base_schema_encodings.pop(offset)
+                current_page_range.base_indirections.pop(offset)
+                current_page_range.base_timestamps.pop(offset)
+                current_page_range.base_rids.pop(rids[i])
+            current_page_range.base_page_sets.pop(page_set_index)
                 
         # remove tail rids from respective base page set from page range area
         if (set_type == 1):
-            tail_rids = [k for k, v in current_page_range.tail_rids.items() if v[0] == page_set_index]
-            for i in range(len(tail_rids)):
-                current_page_range.tail_rids.pop(tail_rids[i])
+            rids = [k for k, v in current_page_range.tail_rids.items() if v[0] == page_set_index]
+            for i in range(len(rids)):
+                offset = current_page_range.tail_rids[rids[i]][1]
+                current_page_range.tail_schema_encodings.pop(offset)
+                current_page_range.tail_indirections.pop(offset)
+                current_page_range.tail_timestamps.pop(offset)
+                current_page_range.tail_rids.pop(rids[i])
+            current_page_range.tail_page_sets.pop(page_set_index)
 
 
 

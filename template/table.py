@@ -59,7 +59,7 @@ class Table:
         # when we start the timer, any class variables assigned after may not be captured, so do it at the end
         self.merge_handler.thread = threading.Timer(self.merge_handler.next_time_to_call - time.time(),
                                                     self.__merge_callback)
-        self.merge_handler.thread.start()
+        #self.merge_handler.thread.start()
 
     def set_index(self, index):
         self.index = index
