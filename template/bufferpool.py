@@ -80,6 +80,7 @@ class Bufferpool:
 
         # remove entry from dictionary
         self.pages_mem_mapping.pop((table_name, page_range_index, page_set_index, set_type))
+        self.dirty_page_sets.discard((table_name, page_range_index, page_set_index, set_type))
 
         # get the current table 
         current_table = self.tables[table_name]
