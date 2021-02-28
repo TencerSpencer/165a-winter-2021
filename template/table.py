@@ -25,7 +25,7 @@ class MergeHandler:
         self.update_mutex = threading.Lock()
 
         # full base page sets, need to append upon insertion
-        self.full_base_page_sets = deque() # (page_range_offset, base_page_set_offset)
+        self.full_base_page_sets = deque()  # (page_range_offset, base_page_set_offset)
 
         # dict of base RID to offset in old copy of base record
         self.outdated_offsets = {}  # {base RID : page_range_offset, base_page_set_offset}
@@ -108,7 +108,6 @@ class Table:
                     self.merge_handler.thread_in_crit_section = False
                     self.merge_handler.update_mutex.release()
 
-        
             self.merge_handler.thread = threading.Timer(self.merge_handler.next_time_to_call - time.time(),
                                                         self.__merge_callback)
             self.merge_handler.next_time_to_call = self.merge_handler.next_time_to_call + MERGE_TIMER_INTERVAL
@@ -128,10 +127,10 @@ class Table:
     def __check_for_merge(self):
         if len(self.merge_handler.outdated_offsets) != 0:
             # dictonaries will error out if their size changes during copy, so use a mutex for copying
-          #  self.merge_handler.dict_mutex.acquire()
+            #  self.merge_handler.dict_mutex.acquire()
             rid_dict = copy.deepcopy(self.merge_handler.outdated_offsets)
             self.merge_handler.outdated_offsets.clear()
-           # self.merge_handler.dict_mutex.release()
+            # self.merge_handler.dict_mutex.release()
 
             check_num = NUMBER_OF_BASE_PAGE_SETS_TO_CHECK if len(self.merge_handler.full_base_page_sets) >= 3 else len(
                 self.merge_handler.full_base_page_sets)
@@ -143,14 +142,15 @@ class Table:
                     self.__merge(curr_range, curr_base)
 
                 # no matter what, reinsert the base page set into the queue
-                self.merge_handler.full_base_page_sets.append((curr_range, curr_base)) 
+                self.merge_handler.full_base_page_sets.append((curr_range, curr_base))
 
-    # merge the selected base_page_set,
+                # merge the selected base_page_set,
+
     def __merge(self, page_range_index, base_page_set_index):
         page_range = self.page_ranges[page_range_index]
         base_page_set = copy.deepcopy(page_range.base_page_sets[base_page_set_index])
         brids = [k for k, v in self.page_directory.items() if v[0] == page_range_index and v[1] == base_page_set_index]
-        self.__check_if_base_loaded(brids[0]) # just need first one since all brids are in same page set
+        self.__check_if_base_loaded(brids[0])  # just need first one since all brids are in same page set
         for i in range(len(brids)):
             _, offset = page_range.base_rids[brids[i]]
             if page_range.base_schema_encodings[offset] != 0:
@@ -172,16 +172,11 @@ class Table:
         for rid in trids:
             self.trid_block_start[rid] = block_start_index
 
-
-
-    
-
     def insert_record(self, *columns):
         key_col = self.key
         new_rid = self.__get_next_base_rid()
         col_list = list(columns)
         key = col_list[key_col]
-
 
         next_free_page_range_index = self.__get_next_available_page_range()
         next_free_base_page_set_index = self.page_ranges[next_free_page_range_index].get_next_free_base_page_set()
@@ -207,31 +202,28 @@ class Table:
         # check if base_page_set is full, if so, add to dequeue
         if not curr_page_range.base_page_sets[next_free_base_page_set_index].has_capacity():
             self.merge_handler.full_base_page_sets.append((next_free_page_range_index, next_free_base_page_set_index))
-            
-            
+
         BUFFER_POOL.unpin_page_set(self.name, next_free_page_range_index, next_free_base_page_set_index, BASE_RID_TYPE)
 
         return result
 
     def update_record(self, key, *columns):
         self.merge_handler.update_mutex.acquire(blocking=True)
-        
+
         base_rid = self.keys[key]
         self.__check_if_base_loaded(base_rid)
 
         page_range_index, base_page_set_index = self.page_directory[base_rid]
 
         # pin base page
-        
+
         BUFFER_POOL.pin_page_set(self.name, page_range_index, base_page_set_index, BASE_RID_TYPE)
 
-
         tail_rid = self.brid_to_trid[base_rid]
-        if tail_rid is not None:         
+        if tail_rid is not None:
             self.__check_if_tail_loaded(tail_rid, page_range_index)
             tail_rid = self.brid_to_trid[base_rid]
         new_tail_rid = self.__get_next_tail_rid()
-        
 
         if self.__tail_page_sets_full(page_range_index):
             tail_page_set_index = len(self.page_ranges[page_range_index].tail_page_sets)
@@ -247,8 +239,8 @@ class Table:
         BUFFER_POOL.mark_as_dirty(self.name, page_range_index, tail_page_set_index, TAIL_RID_TYPE)
         # pin new tail
         BUFFER_POOL.pin_page_set(self.name, page_range_index, tail_page_set_index, TAIL_RID_TYPE)
+        current_tail_page_set = self.page_ranges[page_range_index].tail_rids.get(tail_rid)[0]
         if tail_rid is not None:
-            current_tail_page_set = self.page_ranges[page_range_index].tail_rids.get(tail_rid)[0]
             BUFFER_POOL.pin_page_set(self.name, page_range_index, current_tail_page_set, TAIL_RID_TYPE)
 
         # update key directory data for tail
@@ -257,14 +249,12 @@ class Table:
 
         # append to base RID to a set of RIDs to merge, only do so after update is done, but why does it seem like this is running first?
         self.merge_handler.outdated_offsets[base_rid] = (page_range_index, base_page_set_index)
-        
+
         # unpin everything
         BUFFER_POOL.unpin_page_set(self.name, page_range_index, base_page_set_index, BASE_RID_TYPE)
         BUFFER_POOL.unpin_page_set(self.name, page_range_index, tail_page_set_index, TAIL_RID_TYPE)
         if tail_rid is not None:
-           BUFFER_POOL.unpin_page_set(self.name, page_range_index, current_tail_page_set, TAIL_RID_TYPE)
-       
-        
+            BUFFER_POOL.unpin_page_set(self.name, page_range_index, current_tail_page_set, TAIL_RID_TYPE)
 
         self.merge_handler.update_mutex.release()
         return result
@@ -291,13 +281,12 @@ class Table:
             BUFFER_POOL.pin_page_set(self.name, page_range_index, tail_page_set_index, TAIL_RID_TYPE)
 
         if not self.page_ranges[page_range_index].is_valid(brid):  # check if brid has been invalidated
-            return False 
+            return False
 
-        # get base page sets,
+            # get base page sets,
         base_page_set_index = cur_page_range.base_rids.get(brid)[0]
 
         BUFFER_POOL.pin_page_set(self.name, page_range_index, base_page_set_index, BASE_RID_TYPE)
-        
 
         data = cur_page_range.get_record(brid, query_columns)
 
@@ -305,15 +294,13 @@ class Table:
         if tail_rid:
             BUFFER_POOL.unpin_page_set(self.name, page_range_index, tail_page_set_index, TAIL_RID_TYPE)
 
-        
-        
         return brid, data
 
     def __check_if_base_loaded(self, rid):
-            page_dir_info = self.page_directory.get(rid)
-            if not page_dir_info:
-                page_range_index = rid // (RECORDS_PER_PAGE * PAGE_SETS)
-                self.__load_record_from_disk(rid, page_range_index, BASE_RID_TYPE)
+        page_dir_info = self.page_directory.get(rid)
+        if not page_dir_info:
+            page_range_index = rid // (RECORDS_PER_PAGE * PAGE_SETS)
+            self.__load_record_from_disk(rid, page_range_index, BASE_RID_TYPE)
 
     def __check_if_tail_loaded(self, rid, page_range_index):
         # check if tail page page set needs to be loaded
@@ -326,7 +313,7 @@ class Table:
             brid = self.keys[key]
             self.__check_if_base_loaded(brid)
             page_range_index, page_set = self.page_directory[brid]
-            offset = self.page_ranges[page_range_index].base_rids[brid][1] 
+            offset = self.page_ranges[page_range_index].base_rids[brid][1]
             _, tail_rid = self.page_ranges[page_range_index].base_indirections[offset]
             if tail_rid:
                 self.page_ranges[page_range_index].base_indirections[offset] = (DELETED_WT_RID_TYPE, tail_rid)

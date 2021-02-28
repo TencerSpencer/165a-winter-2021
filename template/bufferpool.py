@@ -75,6 +75,12 @@ class Bufferpool:
     # evaluate if page is dirty then remove any traces
     def __evict_page_set(self, table_name, page_range_index, page_set_index, set_type):
         if self.__is_dirty(table_name, page_range_index, page_set_index, set_type):
+            table = self.tables[table_name]
+            table.disk.next_base_rid = table.next_base_rid
+            table.disk.next_tail_rid = table.next_tail_rid
+            table.disk.write_file_info()
+            table.disk.write_key_directory_set(table.keys, table.brid_to_trid, table.brid_block_start,
+                                               table.trid_block_start)
             meta = self.tables[table_name].get_meta_data(page_range_index, page_set_index, set_type)
             self.__write_to_disk(table_name, page_range_index, page_set_index, set_type, meta)
 
