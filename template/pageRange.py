@@ -65,12 +65,12 @@ class PageRange:
         self.tail_schema_encodings.update(tail_schema_encodings)
         self.tail_indirections.update(tail_indirections)
 
-    def add_record(self, rid, columns):
+    def add_record(self, rid, columns, base_page_set_index):
         if self.is_full():
             return False
 
         # add record to appropriate page set
-        self.__write_base_record(rid, columns)
+        self.__write_base_record(rid, columns, base_page_set_index)
         self.num_base_records += 1
 
         return True
@@ -200,8 +200,8 @@ class PageRange:
     def has_space(self):
         return self.num_base_records < PAGE_SETS * RECORDS_PER_PAGE
 
-    def __write_base_record(self, rid, columns):
-        base_page_set_index = int(self.num_base_records // RECORDS_PER_PAGE)
+    def __write_base_record(self, rid, columns, base_page_set_index):
+        #base_page_set_index = int(self.num_base_records // RECORDS_PER_PAGE)
         base_page_set = self.base_page_sets[base_page_set_index]
 
         # write data
