@@ -185,7 +185,7 @@ class PageRange:
 
     def __get_new_columns_for_new_tail(self, prev_tail_rid, columns):
         data = list(columns)
-        tail_page_set_index, offset = self.tail_rids[prev_tail_rid][0:2]
+        tail_page_set_index, offset = self.tail_rids[prev_tail_rid]
         prev_tail_schema = self.tail_schema_encodings[offset]
         offset = int(offset % RECORDS_PER_PAGE)  # get offset of the individual page
 
