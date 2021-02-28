@@ -27,18 +27,18 @@ class Bufferpool:
         if not self.pages_mem_mapping.get((table_name, page_range_index, page_set_index, set_type)):
             data = self.__load_page_set(disk, num_columns, set_type, block_start_index)
             # append datapoint to lru_enforcement and add to current page tiles
-            self.lru_enforcement.append((table_name, page_range_index, page_set_index))
+            self.lru_enforcement.append((table_name, page_range_index, page_set_index, set_type))
             # storing data with meta data packed in bufferpool
             self.pages_mem_mapping[(table_name, page_range_index, page_set_index, set_type)] = data, num_columns
 
         else:  # pull data from current mem
             data, _ = self.pages_mem_mapping[(table_name, page_range_index, page_set_index, set_type)]
             # reset its position in lru
-            self.lru_enforcement.remove((table_name, page_range_index, page_set_index))
-            self.lru_enforcement.append((table_name, page_range_index, page_set_index))
+            self.lru_enforcement.remove((table_name, page_range_index, page_set_index, set_type))
+            self.lru_enforcement.append((table_name, page_range_index, page_set_index, set_type))
 
         # pin page, for its in use
-        self.pinned_page_sets[(table_name, page_range_index, page_set_index, set_type)] = 1
+        #self.pinned_page_sets[(table_name, page_range_index, page_set_index, set_type)] = 1
         # segment data, then mark it as pinned because it is in use
         return data
 
@@ -63,10 +63,10 @@ class Bufferpool:
             table_name, page_range_index, page_set_index, set_type = self.lru_enforcement.popleft()
 
             # page is currently pinned and we cannot evict it
-            if self.pages_mem_mapping[(table_name, page_range_index, page_set_index, set_type)] is not None:
+            if self.pinned_page_sets[(table_name, page_range_index, page_set_index, set_type)] != 0:
                 # page is currently in use and cannot be evicted
                 # add it back to the queue
-                self.lru_enforcement.append((table_name, page_range_index, page_set_index))
+                self.lru_enforcement.append((table_name, page_range_index, page_set_index, set_type))
 
             # page can be evicted, remove
             else:
@@ -109,8 +109,8 @@ class Bufferpool:
         data = PageSet(num_columns + META_DATA_PAGES)
         # add data to the bufferpool and LRU queue
         self.pages_mem_mapping[(table_name, page_range_index, page_set_index, set_type)] = data, num_columns
-        self.lru_enforcement.append((table_name, page_range_index, page_set_index))
-        self.pinned_page_sets[(table_name, page_range_index, page_set_index, set_type)] = 1
+        self.lru_enforcement.append((table_name, page_range_index, page_set_index, set_type))
+        #self.pinned_page_sets[(table_name, page_range_index, page_set_index, set_type)] = 1
         return data
 
         # also mark table_name, page_set_index as being in use right now

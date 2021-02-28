@@ -22,16 +22,13 @@ class MergeHandler:
 
         # prevent timer from executing if we are performing an update with a mutex
         # https://docs.python.org/3/library/threading.html#threading.Lock.acquire
-        self.dict_mutex = threading.Lock()
+        self.update_mutex = threading.Lock()
 
         # full base page sets, need to append upon insertion
         self.full_base_page_sets = deque() # (page_range_offset, base_page_set_offset)
 
         # dict of base RID to offset in old copy of base record
         self.outdated_offsets = {}  # {base RID : page_range_offset, base_page_set_offset}
-
-        # no merge if update is occurring to prevent contention
-        self.update_occurring = False
 
         # create background proc thread
         self.thread = None
@@ -103,12 +100,15 @@ class Table:
         if not self.merge_handler.thread_stopped:
 
             # if no base page set is full, do not perform a merge
-            if len(self.merge_handler.full_base_page_sets) != 0 & self.merge_handler.update_occurring == False:
-                # call __check_for_merge
-                self.merge_handler.thread_in_crit_section = True
-                self.__check_for_merge()
-                self.merge_handler.thread_in_crit_section = False
+            if len(self.merge_handler.full_base_page_sets) != 0:
+                if (self.merge_handler.update_mutex.acquire(blocking=False) == True):
+                    # call __check_for_merge
+                    self.merge_handler.thread_in_crit_section = True
+                    self.__check_for_merge()
+                    self.merge_handler.thread_in_crit_section = False
+                    self.merge_handler.update_mutex.release()
 
+        
             self.merge_handler.thread = threading.Timer(self.merge_handler.next_time_to_call - time.time(),
                                                         self.__merge_callback)
             self.merge_handler.next_time_to_call = self.merge_handler.next_time_to_call + MERGE_TIMER_INTERVAL
@@ -182,8 +182,11 @@ class Table:
         col_list = list(columns)
         key = col_list[key_col]
 
+
         next_free_page_range_index = self.__get_next_available_page_range()
         next_free_base_page_set_index = self.page_ranges[next_free_page_range_index].get_next_free_base_page_set()
+
+        BUFFER_POOL.pin_page_set(self.name, next_free_page_range_index, next_free_base_page_set_index, BASE_RID_TYPE)
 
         # set key and rid mappings
         self.keys[key] = new_rid
@@ -205,19 +208,33 @@ class Table:
         if not curr_page_range.base_page_sets[next_free_base_page_set_index].has_capacity():
             self.merge_handler.full_base_page_sets.append((next_free_page_range_index, next_free_base_page_set_index))
             
+            
+        BUFFER_POOL.unpin_page_set(self.name, next_free_page_range_index, next_free_base_page_set_index, BASE_RID_TYPE)
 
         return result
 
     def update_record(self, key, *columns):
-        self.update_occurring = True
+        self.merge_handler.update_mutex.acquire(blocking=True)
         
         base_rid = self.keys[key]
         self.__check_if_base_loaded(base_rid)
 
         page_range_index, base_page_set_index = self.page_directory[base_rid]
+
+        # pin base page
+        
+        BUFFER_POOL.pin_page_set(self.name, page_range_index, base_page_set_index, BASE_RID_TYPE)
+
+
         tail_rid = self.brid_to_trid[base_rid]
-        self.__check_if_tail_loaded(tail_rid, page_range_index)
-        tail_rid = self.__get_next_tail_rid()
+        if tail_rid is not None:         
+            self.__check_if_tail_loaded(tail_rid, page_range_index)
+          #  current_tail_page_set = self.page_ranges[page_range_index].tail_rids.get(tail_rid)[0]
+        else:
+            tail_rid = self.__get_next_tail_rid()
+
+
+
         if self.__tail_page_sets_full(page_range_index):
             tail_page_set_index = len(self.page_ranges[page_range_index].tail_page_sets)
             page_set, _, _, _, _, _ = Bufferpool.unpack_data(
@@ -230,6 +247,8 @@ class Table:
 
         # mark tail page set as dirty
         BUFFER_POOL.mark_as_dirty(self.name, page_range_index, tail_page_set_index, TAIL_RID_TYPE)
+        # pin new tail
+        BUFFER_POOL.pin_page_set(self.name, page_range_index, tail_page_set_index, TAIL_RID_TYPE)
 
         # update key directory data for tail
         self.brid_to_trid[base_rid] = tail_rid
@@ -237,8 +256,14 @@ class Table:
 
         # append to base RID to a set of RIDs to merge, only do so after update is done, but why does it seem like this is running first?
         self.merge_handler.outdated_offsets[base_rid] = (page_range_index, base_page_set_index)
+        
+        # unpin everything
+        BUFFER_POOL.unpin_page_set(self.name, page_range_index, base_page_set_index, BASE_RID_TYPE)
+        BUFFER_POOL.unpin_page_set(self.name, page_range_index, tail_page_set_index, TAIL_RID_TYPE)
+       
+        
 
-        self.update_occurring = False
+        self.merge_handler.update_mutex.release()
         return result
 
     def __tail_page_sets_full(self, page_range_index):
@@ -257,12 +282,28 @@ class Table:
         cur_page_range = self.page_ranges[page_range_index]
 
         tail_rid = self.brid_to_trid[brid]
-        self.__check_if_tail_loaded(tail_rid, page_range_index)
+        if tail_rid:
+            self.__check_if_tail_loaded(tail_rid, page_range_index)
+            tail_page_set_index = cur_page_range.tail_rids.get(tail_rid)[0]
+            BUFFER_POOL.pin_page_set(self.name, page_range_index, tail_page_set_index, TAIL_RID_TYPE)
 
         if not self.page_ranges[page_range_index].is_valid(brid):  # check if brid has been invalidated
             return False 
 
+        # get base page sets,
+        base_page_set_index = cur_page_range.base_rids.get(brid)[0]
+
+        BUFFER_POOL.pin_page_set(self.name, page_range_index, base_page_set_index, BASE_RID_TYPE)
+        
+
         data = cur_page_range.get_record(brid, query_columns)
+
+        BUFFER_POOL.unpin_page_set(self.name, page_range_index, base_page_set_index, BASE_RID_TYPE)
+        if tail_rid:
+            BUFFER_POOL.unpin_page_set(self.name, page_range_index, tail_page_set_index, TAIL_RID_TYPE)
+
+        
+        
         return brid, data
 
     def __check_if_base_loaded(self, rid):
