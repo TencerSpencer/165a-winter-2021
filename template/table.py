@@ -236,6 +236,7 @@ class Table:
         result = self.page_ranges[page_range_index].update_record(base_rid, new_tail_rid, columns)
 
         # mark tail page set as dirty
+        BUFFER_POOL.mark_as_dirty(self.name, page_range_index, base_page_set_index, BASE_RID_TYPE)
         BUFFER_POOL.mark_as_dirty(self.name, page_range_index, tail_page_set_index, TAIL_RID_TYPE)
         # pin new tail
         BUFFER_POOL.pin_page_set(self.name, page_range_index, tail_page_set_index, TAIL_RID_TYPE)
