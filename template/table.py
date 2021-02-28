@@ -178,8 +178,11 @@ class Table:
         col_list = list(columns)
         key = col_list[key_col]
 
-        next_free_page_range_index = self.__get_next_available_page_range()
-        next_free_base_page_set_index = self.page_ranges[next_free_page_range_index].get_next_free_base_page_set()
+        next_free_page_range_index = self.__get_next_available_page_range(new_rid)
+        next_free_base_page_set_index = (new_rid // RECORDS_PER_PAGE) % PAGE_SETS
+
+        # get half full page set if it exists
+        #self.__check_if_base_loaded(new_rid - 1)
 
         BUFFER_POOL.pin_page_set(self.name, next_free_page_range_index, next_free_base_page_set_index, BASE_RID_TYPE)
 
@@ -219,14 +222,14 @@ class Table:
 
         BUFFER_POOL.pin_page_set(self.name, page_range_index, base_page_set_index, BASE_RID_TYPE)
 
-        tail_rid = self.brid_to_trid[base_rid]
-        if tail_rid is not None:
-            self.__check_if_tail_loaded(tail_rid, page_range_index)
-            tail_rid = self.brid_to_trid[base_rid]
+        prev_tail_rid = self.brid_to_trid[base_rid]
+        if prev_tail_rid is not None:
+            self.__check_if_tail_loaded(prev_tail_rid, page_range_index)
+            prev_tail_rid = self.brid_to_trid[base_rid]
         new_tail_rid = self.__get_next_tail_rid()
 
         tail_page_set_index = new_tail_rid // RECORDS_PER_PAGE
-        if self.page_ranges[page_range_index].tail_page_sets.get(tail_page_set_index) == None:
+        if self.page_ranges[page_range_index].tail_page_sets.get(tail_page_set_index) is None:
             page_set, _, _, _, _, _ = Bufferpool.unpack_data(
                 BUFFER_POOL.get_new_free_mem_space(self.name, page_range_index, tail_page_set_index, self.num_columns,
                                                    TAIL_RID_TYPE))
@@ -246,7 +249,8 @@ class Table:
         # pin new tail
         BUFFER_POOL.pin_page_set(self.name, page_range_index, tail_page_set_index, TAIL_RID_TYPE)
         current_tail_page_set = None
-        if tail_rid is not None:
+        if prev_tail_rid is not None:
+            prev_tail_page_set = self.page_ranges[page_range_index].tail_rids[prev_tail_rid][0]
             BUFFER_POOL.pin_page_set(self.name, page_range_index, current_tail_page_set, TAIL_RID_TYPE)
 
         # update key directory data for tail
@@ -259,7 +263,7 @@ class Table:
         # unpin everything
         BUFFER_POOL.unpin_page_set(self.name, page_range_index, base_page_set_index, BASE_RID_TYPE)
         BUFFER_POOL.unpin_page_set(self.name, page_range_index, tail_page_set_index, TAIL_RID_TYPE)
-        if tail_rid is not None:
+        if prev_tail_rid is not None:
             BUFFER_POOL.unpin_page_set(self.name, page_range_index, current_tail_page_set, TAIL_RID_TYPE)
 
         self.merge_handler.update_mutex.release()
@@ -311,7 +315,7 @@ class Table:
     def __check_if_tail_loaded(self, rid, page_range_index):
         # check if tail page page set needs to be loaded
         if rid:
-            if not self.page_ranges[page_range_index].tail_rids.get(rid):
+            if self.page_ranges[page_range_index].tail_rids.get(rid) is None:
                 self.__load_record_from_disk(rid, page_range_index, TAIL_RID_TYPE)
 
     def remove_record(self, key):
@@ -341,34 +345,17 @@ class Table:
         return current_rid
 
     # returns an index of the next available page range
-    def __get_next_available_page_range(self):
-        if len(self.page_ranges) == 0:
-            # no current page range, build one for starters and append to list
+    def __get_next_available_page_range(self, new_rid):
+        page_range_index = new_rid // (RECORDS_PER_PAGE * PAGE_SETS)
+        if self.page_ranges.get(page_range_index) is None:  # page range doesn't exist
             new_page_range = PageRange(self.num_columns)
             for i in range(PAGE_SETS):
                 page_set, _, _, _, _, _ = Bufferpool.unpack_data(
                     BUFFER_POOL.get_new_free_mem_space(self.name, 0, i, self.num_columns, BASE_RID_TYPE))
                 new_page_range.base_page_sets[i] = page_set
-            self.page_ranges[0] = new_page_range
-            # our index will be our only page range
-            return 0
-
-        # note, I assume that base records will be removed at some point, so I choose to loop through each
-        for i in range(len(self.page_ranges)):
-            if not self.page_ranges[i].is_full():
-                return i
-
-        # if we reached here, then all our current page ranges are full. As such, build a new one
-        new_page_range = PageRange(self.num_columns)
-        for i in range(PAGE_SETS):
-            page_set, _, _, _, _, _ = Bufferpool.unpack_data(
-                BUFFER_POOL.get_new_free_mem_space(self.name, len(self.page_ranges), i, self.num_columns,
-                                                   BASE_RID_TYPE))
-            new_page_range.base_page_sets[i] = page_set
-        self.page_ranges[len(self.page_ranges)] = new_page_range
-
-        # length returns an index + 1, so subtract one to compensate
-        return len(self.page_ranges) - 1
+            page_range_index = new_rid // (RECORDS_PER_PAGE * PAGE_SETS)
+            self.page_ranges[page_range_index] = new_page_range
+        return page_range_index
 
     def get_meta_data(self, page_range_index, page_set_index, set_type):
         page_range = self.page_ranges[page_range_index]

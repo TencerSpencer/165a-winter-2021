@@ -197,12 +197,6 @@ class PageRange:
 
         return data
 
-    def get_next_free_base_page_set(self):
-        return self.num_base_records // RECORDS_PER_PAGE
-
-    def get_next_free_tail_page_set(self):
-        return self.num_tail_records // RECORDS_PER_PAGE
-
     def has_space(self):
         return self.num_base_records < PAGE_SETS * RECORDS_PER_PAGE
 
