@@ -79,7 +79,7 @@ class Bufferpool:
             self.__write_to_disk(table_name, page_range_index, page_set_index, set_type, meta)
 
         # remove entry from dictionary
-        self.pages_mem_mapping.pop((table_name, page_range_index, page_set_index))
+        self.pages_mem_mapping.pop((table_name, page_range_index, page_set_index, set_type))
 
         # get the current table 
         current_table = self.tables[table_name]
