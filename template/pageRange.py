@@ -231,7 +231,6 @@ class PageRange:
         # if self.__tail_page_sets_full():
         # self.tail_page_sets[len(self.tail_page_sets)] = BUFFER_POOL.get_new_free_mem_space()
 
-        tail_page_set_index = int(self.num_tail_records // RECORDS_PER_PAGE)
         tail_page_set = self.tail_page_sets[tail_page_set_index]
 
         # write data

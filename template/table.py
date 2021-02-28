@@ -225,16 +225,20 @@ class Table:
             tail_rid = self.brid_to_trid[base_rid]
         new_tail_rid = self.__get_next_tail_rid()
 
-        if self.__tail_page_sets_full(page_range_index):
-            tail_page_set_index = len(self.page_ranges[page_range_index].tail_page_sets)
+        tail_page_set_index = new_tail_rid // RECORDS_PER_PAGE
+        if self.page_ranges[page_range_index].tail_page_sets.get(tail_page_set_index) == None:
             page_set, _, _, _, _, _ = Bufferpool.unpack_data(
                 BUFFER_POOL.get_new_free_mem_space(self.name, page_range_index, tail_page_set_index, self.num_columns,
                                                    TAIL_RID_TYPE))
             self.page_ranges[page_range_index].tail_page_sets[tail_page_set_index] = page_set
-        else:
-            tail_page_set_index = self.page_ranges[page_range_index].get_next_free_tail_page_set()
+        elif self.__tail_page_sets_full(tail_page_set_index, page_range_index):
+            tail_page_set_index += 1
+            page_set, _, _, _, _, _ = Bufferpool.unpack_data(
+                BUFFER_POOL.get_new_free_mem_space(self.name, page_range_index, tail_page_set_index, self.num_columns,
+                                                   TAIL_RID_TYPE))
+            self.page_ranges[page_range_index].tail_page_sets[tail_page_set_index] = page_set
         
-        result = self.page_ranges[page_range_index].update_record(base_rid, new_tail_rid, columns , tail_page_set_index)
+        result = self.page_ranges[page_range_index].update_record(base_rid, new_tail_rid, columns, tail_page_set_index)
 
         # mark tail page set as dirty
         BUFFER_POOL.mark_as_dirty(self.name, page_range_index, base_page_set_index, BASE_RID_TYPE)
@@ -261,11 +265,11 @@ class Table:
         self.merge_handler.update_mutex.release()
         return result
 
-    def __tail_page_sets_full(self, page_range_index):
+    def __tail_page_sets_full(self, page_set_index, page_range_index):
         if len(self.page_ranges[page_range_index].tail_page_sets) == 0:
             return True
 
-        return not list(self.page_ranges[page_range_index].tail_page_sets.values())[-1].has_capacity()
+        return not self.page_ranges[page_range_index].tail_page_sets[page_set_index].has_capacity()
 
     def select_record(self, key, query_columns):
         if key not in self.keys:
@@ -293,7 +297,7 @@ class Table:
         data = cur_page_range.get_record(brid, query_columns)
 
         BUFFER_POOL.unpin_page_set(self.name, page_range_index, base_page_set_index, BASE_RID_TYPE)
-        if tail_rid:
+        if tail_rid is not None:
             BUFFER_POOL.unpin_page_set(self.name, page_range_index, tail_page_set_index, TAIL_RID_TYPE)
 
         return brid, data
