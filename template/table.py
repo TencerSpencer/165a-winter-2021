@@ -114,6 +114,8 @@ class Table:
             # this implementation will first be in mem
             self.page_ranges[page_range_index].add_tail_page_set_from_disk(page_set, page_set_index, trids,
                                                                            times, schema, indir, indir_t)
+
+            #new_block_start_index = self.__get_tail_block(page_range_index, page_set_index)
             self.__add_trids_to_key_directory_info(trids, block_start_index)
 
     # for help with background process operation and to ensure timer is consistent
@@ -362,7 +364,7 @@ class Table:
             else:
                 self.page_ranges[page_range_index].base_indirections[offset] = (DELETED_NT_RID_TYPE, tail_rid)
             # swapped from TAIL_RID_TYPE to BASE_RID_TYPE.
-            BUFFER_POOL.mark_as_dirty(self.name, page_range_index, page_set, BASE_RID_TYPE)
+            BUFFER_POOL.mark_as_dirty(self.name, page_range_index, page_set, TAIL_RID_TYPE)
             return True
 
         return False

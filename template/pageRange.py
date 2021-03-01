@@ -54,6 +54,7 @@ class PageRange:
         tail_indirections = {}
 
         for i in range(len(trids)):
+            # todo: this is causing internal page set issues
             internal_offset = trids[i] % (RECORDS_PER_PAGE * PAGE_SETS)
             tail_rids[trids[i]] = (page_set_index, internal_offset)
             tail_timestamps[internal_offset] = times[i]
