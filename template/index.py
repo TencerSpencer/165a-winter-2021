@@ -88,6 +88,12 @@ class Index:
             return
         self.indices[column_number].insert(value, rid, True)
 
+    def delete(self, column_number, value, rid):
+        if column_number >= self.table.num_columns:
+            return
+        self.indices[column_number].remove(value, rid)
+
+
 
 class RHashNode:
     def __init__(self, value, rid, prev_node=None, next_node=None):
@@ -130,9 +136,11 @@ class RHash:
         return self.size
 
     def get_range(self, begin, end):
-        # get the first node 
+        # get the first node
         rids = []
         node = self.__getClosestNode(begin)
+        if node.value < begin:
+            return []
         while node != None and node.value <= end:
             rids.extend(node.get_RIDs())
             node = node.next_node

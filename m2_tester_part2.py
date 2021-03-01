@@ -16,7 +16,7 @@ query = Query(grades_table)
 # repopulate with random data
 records = {}
 seed(3562901)
-for i in range(0, 10000):
+for i in range(0, 1000):
     key = 92106429 + i
     records[key] = [key, randint(0, 20), randint(0, 20), randint(0, 20), randint(0, 20)]
 
@@ -29,9 +29,8 @@ for _ in range(10):
             records[key][j] = value
 keys = sorted(list(records.keys()))
 for key in keys:
-    pass
-   # print(records[key])
-   # print(records[key])
+   print(records[key])
+   print(records[key])
 
 for key in keys:
     record = query.select(key, 0, [1, 1, 1, 1, 1])[0]

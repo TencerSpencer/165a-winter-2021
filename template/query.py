@@ -21,7 +21,14 @@ class Query:
     """
 
     def delete(self, key):
-        return self.table.remove_record(key)
+            # Remove all entries from built indices
+            rid, columns = self.table.select_record(key, [1]*self.table.num_columns)
+            if self.table.index != None:
+                for i in range(self.table.num_columns):
+                    if self.table.index.is_index_built(i):
+                        self.table.index.delete(i, columns[i], rid)
+            # Remove the record from the table
+            return self.table.remove_record(key)
 
     """
     # Insert a record with specified columns
@@ -67,17 +74,24 @@ class Query:
                 records = [Record(data[0], key, data[1])]
                 return records
                 # return [data[1]]
+        if data == False or len(data) == 0:
+            return [False]
         return data
 
-    """ select_range requires that an index be built on the query column"""
+    """ select_range requires that an index be built on the query column
+        INCLUSIVE """
 
     def select_range(self, begin, end, column, query_columns):
+        if self.table.index == None:
+            self.table.index = Index(self.table)
         data = []
-        if not self.index.is_index_built(column):
-            self.index.create_index(column)
-        RIDs = self.index.locate_range(column, begin, end)
+        if not self.table.index.is_index_built(column):
+            self.table.index.create_index(column)
+        RIDs = self.table.index.locate_range(column, begin, end)
         for rid in RIDs:
-            data.append(self.select_record_using_rid(rid, query_columns))
+            raw = self.table.select_record_using_rid(rid, query_columns)
+            record = Record(raw[0], raw[1][self.table.key], raw[1])
+            data.append(record)
         return data
 
     """
@@ -99,7 +113,15 @@ class Query:
                     continue
                 if self.table.index.is_index_built(i):
                     self.table.index.update_value(i, old_record[i], value, rid)
-        return self.table.update_record(key, *new_columns)
+        # if new_columns overwrites key:
+        ret = self.table.update_record(key, *new_columns)
+        if new_columns[self.table.key] != None:
+            rid = self.table.keys[key]
+            # Remove mapping from key to rid
+            del self.table.keys[key]
+            # Add the new mapping
+            self.table.keys[new_columns[self.table.key]] = rid
+        return ret
 
     """
     :param start_range: int         # Start of the key range to aggregate 
@@ -119,7 +141,8 @@ class Query:
         run = False
         for i in range(start_range, end_range + 1):
             result = self.select(i, 0, query_cols)
-            if result:
+            # print(result)
+            if result and result[0]:
                 sum += result[0].columns[aggregate_column_index]
                 run = True
         if not run:
@@ -136,6 +159,7 @@ class Query:
     """
 
     def increment(self, key, column):
+        # print(self.select(key, self.table.key, [1] * self.table.num_columns))
         r = self.select(key, self.table.key, [1] * self.table.num_columns)[0]
         if r is not False:
             r = r.columns
