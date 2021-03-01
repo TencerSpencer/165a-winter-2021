@@ -364,7 +364,7 @@ class Table:
             else:
                 self.page_ranges[page_range_index].base_indirections[offset] = (DELETED_NT_RID_TYPE, tail_rid)
             # swapped from TAIL_RID_TYPE to BASE_RID_TYPE.
-            BUFFER_POOL.mark_as_dirty(self.name, page_range_index, page_set, TAIL_RID_TYPE)
+            BUFFER_POOL.mark_as_dirty(self.name, page_range_index, page_set, BASE_RID_TYPE)
             return True
 
         return False

@@ -55,7 +55,8 @@ class PageRange:
 
         for i in range(len(trids)):
             # todo: this is causing internal page set issues
-            internal_offset = trids[i] % (RECORDS_PER_PAGE * PAGE_SETS)
+            internal_offset = i + (RECORDS_PER_PAGE * page_set_index)
+            #self.tail_rids[rid] = (tail_page_set_index, internal_offset + (RECORDS_PER_PAGE * tail_page_set_index))
             tail_rids[trids[i]] = (page_set_index, internal_offset)
             tail_timestamps[internal_offset] = times[i]
             tail_schema_encodings[internal_offset] = schema[i]
