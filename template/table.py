@@ -60,7 +60,7 @@ class Table:
         # when we start the timer, any class variables assigned after may not be captured, so do it at the end
         self.merge_handler.thread = threading.Timer(self.merge_handler.next_time_to_call - time.time(),
                                                     self.__merge_callback)
-        #self.merge_handler.thread.start()
+        self.merge_handler.thread.start()
 
     def set_index(self, index):
         self.index = index
@@ -164,6 +164,7 @@ class Table:
                 if list(rid_dict.values()).count((curr_range, curr_base)) >= MERGE_THRESHOLD:
                     # merge base_page_set
                     self.__merge(curr_range, curr_base)
+                    #print("MERGE OCCURRED")
 
                 # no matter what, reinsert the base page set into the queue
                 self.merge_handler.full_base_page_sets.append((curr_range, curr_base))
