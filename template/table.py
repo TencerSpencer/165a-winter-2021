@@ -293,7 +293,10 @@ class Table:
 
     def __get_tail_block(self, page_range_index, tail_page_set):
         if self.tblock_directory.get((page_range_index, tail_page_set)) is None:
-            self.tblock_directory[(page_range_index, tail_page_set)] = self.disk.get_next_tail_block()
+            next_block = self.disk.get_next_tail_block()
+            self.tblock_directory[(page_range_index, tail_page_set)] = next_block
+            return next_block
+            
         else:
             return self.tblock_directory[(page_range_index, tail_page_set)]
 
@@ -358,7 +361,8 @@ class Table:
                 self.page_ranges[page_range_index].base_indirections[offset] = (DELETED_WT_RID_TYPE, tail_rid)
             else:
                 self.page_ranges[page_range_index].base_indirections[offset] = (DELETED_NT_RID_TYPE, tail_rid)
-            BUFFER_POOL.mark_as_dirty(self.name, page_range_index, page_set, TAIL_RID_TYPE)
+            # swapped from TAIL_RID_TYPE to BASE_RID_TYPE.
+            BUFFER_POOL.mark_as_dirty(self.name, page_range_index, page_set, BASE_RID_TYPE)
             return True
 
         return False
