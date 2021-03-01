@@ -50,6 +50,7 @@ class Table:
         self.trid_block_start = {}  # { tail rid : block start index }
         self.brid_to_trid = {}  # { base rid : latest tail rid }
         self.page_directory = {}  # key-value pairs { rid : (page range index, base page set index) }
+        self.tblock_directory = {}  # { (page range index, tail page set index) : block start index
         self.index = None
         self.next_base_rid = START_RID
         self.next_tail_rid = START_RID
@@ -276,7 +277,7 @@ class Table:
 
         # update key directory data for tail
         self.brid_to_trid[base_rid] = new_tail_rid
-        self.trid_block_start[new_tail_rid] = (new_tail_rid // RECORDS_PER_PAGE) * (self.num_columns + META_DATA_PAGES)
+        self.trid_block_start[new_tail_rid] = self.__get_tail_block(page_range_index, tail_page_set_index)
 
         # append to base RID to a set of RIDs to merge, only do so after update is done, but why does it seem like this is running first?
         self.merge_handler.outdated_offsets[base_rid] = (page_range_index, base_page_set_index)
@@ -289,6 +290,13 @@ class Table:
 
         self.merge_handler.update_mutex.release()
         return result
+
+    def __get_tail_block(self, page_range_index, tail_page_set):
+        if self.tblock_directory.get((page_range_index, tail_page_set)) is None:
+            self.tblock_directory[(page_range_index, tail_page_set)] = self.disk.get_next_tail_block()
+        else:
+            return self.tblock_directory[(page_range_index, tail_page_set)]
+
 
     def __tail_page_sets_full(self, page_set_index, page_range_index):
         if len(self.page_ranges[page_range_index].tail_page_sets) == 0:

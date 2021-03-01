@@ -14,6 +14,7 @@ class Disk:
         self.tail_fn = os.path.join(self.table_dir, table_name + ".tail")
         self.info_fn = os.path.join(self.table_dir, table_name + ".info")
         self.key_directory = os.path.join(self.table_dir, table_name + ".kd")
+        self.next_tail_block = 0
         if not self.__files_exist():
             self.num_columns = num_columns
             self.key_column = key_column
@@ -54,6 +55,7 @@ class Disk:
         self.key_column = int.from_bytes(f.read(8), byteorder="little")
         self.next_base_rid = int.from_bytes(f.read(8), byteorder="little")
         self.next_tail_rid = int.from_bytes(f.read(8), byteorder="little")
+        self.next_tail_block = int.from_bytes(f.read(8), byteorder="little")
         f.close()
 
     def write_file_info(self):
@@ -62,6 +64,7 @@ class Disk:
             f.write(int.to_bytes(self.key_column, length=8, byteorder="little"))
             f.write(int.to_bytes(self.next_base_rid, length=8, byteorder="little"))
             f.write(int.to_bytes(self.next_tail_rid, length=8, byteorder="little"))
+            f.write(int.to_bytes(self.next_tail_block, length=8, byteorder="little"))
 
     def read_table(self):
         keys, brids_to_trids, base_block_start, tail_block_starts = self.read_key_directory_data()
@@ -213,10 +216,11 @@ class Disk:
         return page_set
 
     def write_base_page_set(self, page_set, block_start_index):
-        with open(self.base_fn, "ab") as f:
+        with open(self.base_fn, "r+b") as f:
             file_size = os.path.getsize(self.base_fn)
             if file_size < block_start_index * PAGE_SIZE:
                 padding = bytearray((block_start_index * PAGE_SIZE) - file_size)
+                f.seek(0, 2)
                 f.write(padding)
             f.seek(block_start_index * PAGE_SIZE)
             for i in range(self.num_columns + META_DATA_PAGES):
@@ -232,11 +236,17 @@ class Disk:
         return page_set
 
     def write_tail_page_set(self, page_set, block_start_index):
-        with open(self.tail_fn, "ab") as f:
+        with open(self.tail_fn, "r+b") as f:
             file_size = os.path.getsize(self.tail_fn)
             if file_size < block_start_index * PAGE_SIZE:
                 padding = bytearray((block_start_index * PAGE_SIZE) - file_size)
+                f.seek(0, 2)
                 f.write(padding)
             f.seek(block_start_index * PAGE_SIZE)
             for i in range(self.num_columns + META_DATA_PAGES):
                 f.write(page_set.pages[i].data)
+
+    def get_next_tail_block(self):
+        block_num = self.next_tail_block
+        self.next_tail_block += (self.num_columns + META_DATA_PAGES)
+        return block_num
