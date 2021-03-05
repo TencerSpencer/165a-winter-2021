@@ -6,7 +6,9 @@ class TransactionWorker:
     """
     # Creates a transaction worker object.
     """
-    def __init__(self, transactions = []):
+    def __init__(self, transactions=None):
+        if transactions is None:
+            transactions = []
         self.stats = []
         self.transactions = transactions
         self.result = 0
