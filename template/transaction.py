@@ -35,16 +35,24 @@ class Transaction:
 
     # If you choose to implement this differently this method must still return True if transaction commits or False on abort
     def run(self):
+        result = None
         for query, args, query_type in self.queries:
             if query_type == SELECT_TYPE:
+                result = query.select(args[0], args[1], args[2:])
                 pass
-            elif query_type == UPDATE_TYPE or query_type == INSERT_TYPE:
+            elif query_type == UPDATE_TYPE:
+                result = query.update(args[0], args[1:])
+                
+                pass
+            elif query_type == INSERT_TYPE:
+                result = query.insert(args)
                 pass
             elif query_type == DELETE_TYPE:
+                result = query.delete(args)
                 pass
-            result = query(*args)
+            # result = query(*args)
             # If the query has failed the transaction should abort
-            if result == False:
+            if result is False:
                 return self.abort()
         return self.commit()
 

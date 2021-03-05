@@ -56,11 +56,47 @@ class Table:
         self.next_tail_rid = START_RID
         self.page_ranges = {}
         self.disk = None
+
+        # a read semaphore will have "unlimited" locks, while a write lock is only one
+        self.page_set_locks = {} # {(page_range_offset, page_set_offset, set_type) : read_semaphore, write lock}
+
         self.merge_handler = MergeHandler()
         # when we start the timer, any class variables assigned after may not be captured, so do it at the end
         self.merge_handler.thread = threading.Timer(self.merge_handler.next_time_to_call - time.time(),
                                                     self.__merge_callback)
         self.merge_handler.thread.start()
+
+
+    # build an entry in page_set_locks
+    def build_page_set_lock(self, page_range, page_set, set_type):
+        if self.page_set_locks.get((page_range, page_set, set_type)) is None:
+            # build entry
+            read_counter = 0
+            mutex = threading.Lock()
+            self.page_set_locks[(page_range, page_set, set_type)] = (read_counter, mutex)
+            
+
+    def is_read_safe(self, page_range, page_set, set_type):
+        # if no write is occurring
+        return not self.page_set_locks.get(page_range, page_set, set_type)[1].locked()
+
+    def __increment_read_counter(self, page_range, page_set, set_type):
+        self.page_set_locks[(page_range, page_set, set_type)][0] += 1
+        pass
+
+    def __decrement_read_counter(self, page_range, page_set, set_type):
+        self.page_set_locks[(page_range, page_set, set_type)][0] -= 1
+        if self.page_set_locks[(page_range, page_set, set_type)][0] < 0:
+            print("page_set_locks below 0 error: " + self.page_set_locks[(page_range, page_set, set_type)][0])
+            exit(-1)
+
+    # mutex is acquired here
+    def is_write_safe(self, page_range, page_set, set_type): # other info
+        if self.page_set_locks.get(page_range, page_set, set_type)[0] != 0:
+            return False # a read it occurring
+        return self.page_set_locks.get(page_range, page_set, set_type)[1].acquire(blocking = False) 
+
+    
 
     def set_index(self, index):
         self.index = index
@@ -106,6 +142,7 @@ class Table:
             self.__add_brids_to_page_directory(brids, indir, indir_t, page_range_index, page_set_index)
             self.page_ranges[page_range_index].add_base_page_set_from_disk(page_set, page_set_index, brids,
                                                                            times, schema, indir, indir_t)
+            self.build_page_set_lock(page_range_index, page_set_index, set_type)
         else:
             page_set_index = len(self.page_ranges[page_range_index].tail_page_sets)
             data = BUFFER_POOL.get_page_set(self.name, self.num_columns, self.disk, page_range_index, page_set_index,
@@ -117,6 +154,7 @@ class Table:
 
             #new_block_start_index = self.__get_tail_block(page_range_index, page_set_index)
             self.__add_trids_to_key_directory_info(trids, block_start_index)
+            self.build_page_set_lock(page_range_index, page_set_index, set_type)
 
     # for help with background process operation and to ensure timer is consistent
     # https://stackoverflow.com/questions/8600161/executing-periodic-actions-in-python
@@ -198,16 +236,22 @@ class Table:
             self.trid_block_start[rid] = block_start_index
 
     def insert_record(self, *columns):
+        
         key_col = self.key
-        new_rid = self.__get_next_base_rid()
         col_list = list(columns)
         key = col_list[key_col]
+
+        new_rid = self.next_base_rid
 
         next_free_page_range_index = self.__get_next_available_page_range(new_rid)
         next_free_base_page_set_index = (new_rid // RECORDS_PER_PAGE) % PAGE_SETS
 
-        # get half full page set if it exists
-        #self.__check_if_base_loaded(new_rid - 1)
+        # Might need separate locks for assigning based on how we go about things, but for now
+        self.build_page_set_lock(next_free_page_range_index, next_free_base_page_set_index, BASE_RID_TYPE)
+        if not self.is_write_safe(next_free_page_range_index, next_free_base_page_set_index, BASE_RID_TYPE):
+            return False
+
+        self.__increment_base_rid()
 
         BUFFER_POOL.pin_page_set(self.name, next_free_page_range_index, next_free_base_page_set_index, BASE_RID_TYPE)
 
@@ -233,9 +277,12 @@ class Table:
 
         BUFFER_POOL.unpin_page_set(self.name, next_free_page_range_index, next_free_base_page_set_index, BASE_RID_TYPE)
 
+        self.page_set_locks[(next_free_page_range_index, next_free_base_page_set_index, BASE_RID_TYPE)][1].release()
+
         return result
 
     def update_record(self, key, *columns):
+        # get merge handler mutex
         self.merge_handler.update_mutex.acquire(blocking=True)
 
         base_rid = self.keys[key]
@@ -251,13 +298,15 @@ class Table:
         if prev_tail_rid is not None:
             self.__check_if_tail_loaded(prev_tail_rid, page_range_index)
             prev_tail_rid = self.brid_to_trid[base_rid]
-        new_tail_rid = self.__get_next_tail_rid()
+            # no need to block previous tails
+        
+        new_tail_rid = self.next_tail_rid
 
         tail_page_set_index = new_tail_rid // RECORDS_PER_PAGE
         if self.page_ranges[page_range_index].tail_page_sets.get(tail_page_set_index) is None:
             page_set, _, _, _, _, _ = Bufferpool.unpack_data(
                 BUFFER_POOL.get_new_free_mem_space(self.name, page_range_index, tail_page_set_index, self.num_columns,
-                                                   TAIL_RID_TYPE))
+                                                   TAIL_RID_TYPE))                                        
             self.page_ranges[page_range_index].tail_page_sets[tail_page_set_index] = page_set
         elif self.__tail_page_sets_full(tail_page_set_index, page_range_index):
             tail_page_set_index += 1
@@ -265,6 +314,14 @@ class Table:
                 BUFFER_POOL.get_new_free_mem_space(self.name, page_range_index, tail_page_set_index, self.num_columns,
                                                    TAIL_RID_TYPE))
             self.page_ranges[page_range_index].tail_page_sets[tail_page_set_index] = page_set
+
+        self.build_page_set_lock(page_range_index, tail_page_set_index, TAIL_RID_TYPE)
+        if not (self.is_write_safe(page_range_index, tail_page_set_index, TAIL_RID_TYPE) & 
+                    self.is_read_safe(page_range_index, base_page_set_index, BASE_RID_TYPE)):
+            return False
+        
+        self.__increment_tail_rid()
+        self.__increment_read_counter(page_range_index, base_page_set_index, BASE_RID_TYPE)
         
         result = self.page_ranges[page_range_index].update_record(base_rid, new_tail_rid, columns, tail_page_set_index)
 
@@ -291,7 +348,13 @@ class Table:
         if prev_tail_rid is not None:
             BUFFER_POOL.unpin_page_set(self.name, page_range_index, current_tail_page_set, TAIL_RID_TYPE)
 
+       # self.is_write_safe(page_range_index, tail_page_set_index, TAIL_RID_TYPE) & 
+                   # self.is_read_safe(page_range_index, base_page_set_index, BASE_RID_TYPE)):
+
+        self.__decrement_read_counter(page_range_index, base_page_set_index, BASE_RID_TYPE)
+        self.page_set_locks[(page_range_index, tail_page_set_index, TAIL_RID_TYPE)][1].release()
         self.merge_handler.update_mutex.release()
+
         return result
 
     def __get_tail_block(self, page_range_index, tail_page_set):
@@ -324,12 +387,22 @@ class Table:
             self.__check_if_tail_loaded(tail_rid, page_range_index)
             tail_page_set_index = cur_page_range.tail_rids.get(tail_rid)[0]
             BUFFER_POOL.pin_page_set(self.name, page_range_index, tail_page_set_index, TAIL_RID_TYPE)
+            # check if tail page set can be read
+            if not self.is_read_safe(page_range_index, tail_page_set_index, TAIL_RID_TYPE):
+                return False
+            self.__increment_read_counter(page_range_index, tail_page_set_index, TAIL_RID_TYPE)
 
         if not self.page_ranges[page_range_index].is_valid(brid):  # check if brid has been invalidated
             return False
 
-            # get base page sets,
+        # get base page sets,
         base_page_set_index = cur_page_range.base_rids.get(brid)[0]
+
+        # check is base page set can be read
+        if not self.is_read_safe(page_range_index, base_page_set_index, BASE_RID_TYPE):
+            return False
+        self.__increment_read_counter(page_range_index, base_page_set_index, BASE_RID_TYPE)
+
 
         BUFFER_POOL.pin_page_set(self.name, page_range_index, base_page_set_index, BASE_RID_TYPE)
 
@@ -338,6 +411,9 @@ class Table:
         BUFFER_POOL.unpin_page_set(self.name, page_range_index, base_page_set_index, BASE_RID_TYPE)
         if tail_rid is not None:
             BUFFER_POOL.unpin_page_set(self.name, page_range_index, tail_page_set_index, TAIL_RID_TYPE)
+            self.__decrement_read_counter(page_range_index, tail_page_set_index, TAIL_RID_TYPE)
+
+        self.page_set_locks[(page_range_index, base_page_set_index, BASE_RID_TYPE)][1].release()
 
         return brid, data
 
@@ -360,25 +436,30 @@ class Table:
             page_range_index, page_set = self.page_directory[brid]
             offset = self.page_ranges[page_range_index].base_rids[brid][1]
             _, tail_rid = self.page_ranges[page_range_index].base_indirections[offset]
+
+            # if we cannot write to the current base_indirection
+            if not self.is_write_safe(page_range_index, page_set, BASE_RID_TYPE):
+                return False
+
             if tail_rid:
                 self.page_ranges[page_range_index].base_indirections[offset] = (DELETED_WT_RID_TYPE, tail_rid)
             else:
                 self.page_ranges[page_range_index].base_indirections[offset] = (DELETED_NT_RID_TYPE, tail_rid)
             # swapped from TAIL_RID_TYPE to BASE_RID_TYPE.
             BUFFER_POOL.mark_as_dirty(self.name, page_range_index, page_set, BASE_RID_TYPE)
+
+            # release write mutex
+            self.page_set_locks.get(page_range_index, page_set, BASE_RID_TYPE)[1].release()
+
             return True
 
         return False
 
-    def __get_next_base_rid(self):
-        current_rid = self.next_base_rid
+    def __increment_base_rid(self):
         self.next_base_rid += 1
-        return current_rid
 
-    def __get_next_tail_rid(self):
-        current_rid = self.next_tail_rid
+    def __increment_tail_rid(self):
         self.next_tail_rid += 1
-        return current_rid
 
     # returns an index of the next available page range
     def __get_next_available_page_range(self, new_rid):
