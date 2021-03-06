@@ -122,7 +122,7 @@ class Bufferpool:
 
 
 
-       # self.tail_rids = {}  # key-value pairs: { rid : (page set index, offset) }
+    # self.tail_rids = {}  # key-value pairs: { rid : (page set index, offset) }
     # allocate new space for a page_set
     # assume meta data is packed
     def get_new_free_mem_space(self, table_name, page_range_index, page_set_index, num_columns, set_type):

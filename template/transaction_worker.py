@@ -12,6 +12,7 @@ class TransactionWorker:
         self.stats = []
         self.transactions = transactions
         self.result = 0
+        self.local_page_sets
         pass
 
     """

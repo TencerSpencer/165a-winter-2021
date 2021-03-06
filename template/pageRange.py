@@ -65,6 +65,18 @@ class PageRange:
         self.tail_schema_encodings.update(tail_schema_encodings)
         self.tail_indirections.update(tail_indirections)
 
+    def get_record_offset(self, rid, set_type):
+        if set_type == BASE_RID_TYPE:
+            return self.base_rids[rid][1]
+        else:
+            return self.tail_rids[rid][1]
+
+
+    def get_next_tail_offset(self, tail_page_set_index):
+        tail_page_set = self.tail_page_sets[tail_page_set_index]
+        internal_offset = tail_page_set.pages[0].num_records
+        return internal_offset + (RECORDS_PER_PAGE * tail_page_set_index)
+
     def add_record(self, rid, columns, base_page_set_index):
         if self.is_full():
             return False
@@ -220,6 +232,7 @@ class PageRange:
         # https://www.tutorialspoint.com/How-to-get-current-time-in-milliseconds-in-Python#:~:text=You%20can%20get%20the%20current,1000%20and%20round%20it%20off.
         # To convert from milliseconds to date/time, https://stackoverflow.com/questions/748491/how-do-i-create-a-datetime-in-python-from-milliseconds
         self.base_timestamps[offset] = int(round(time.time() * 1000))
+
 
     def __write_tail_record(self, rid, schema, indirection, columns, tail_page_set_index):
         tail_page_set = self.tail_page_sets[tail_page_set_index]
