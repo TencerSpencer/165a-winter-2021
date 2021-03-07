@@ -22,9 +22,19 @@ class LockManager:
 
     # mutex is acquired here
     def is_write_safe(self, rid, set_type):
-        if self.s_locks.get(rid, set_type):
-            return False  # a read it occurring
-        return self.x_locks.get(rid, set_type) == []
+        shared = self.s_locks.get(rid, set_type)
+
+        if len(shared) > 1:
+            return False
+        if shared:
+            if shared[0] != threading.currentThread().name:
+                return False
+
+        exclusive = self.x_locks.get(rid, set_type)
+        if exclusive:
+            return exclusive[0] == threading.currentThread().name
+
+        return True
 
     def __increment_read_counter(self, rid, set_type):
         self.s_locks[(rid, set_type)].append(threading.currentThread().name)
