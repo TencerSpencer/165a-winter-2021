@@ -1,5 +1,6 @@
 from template.query import Query
 from template.config import *
+import queue
 
 INSERT_TYPE = Query.insert
 UPDATE_TYPE = Query.update
@@ -13,7 +14,7 @@ class Transaction:
     """
     def __init__(self):
         self.queries = []
-        pass
+        self.completed_queries = queue.LifoQueue()
 
     """
     # Adds the given query to this transaction
@@ -38,24 +39,19 @@ class Transaction:
         for query, args, query_type in self.queries:
             if query_type == SELECT_TYPE:
                 result = query.select(args[0], args[1], args[2:])
-                pass
             elif query_type == UPDATE_TYPE:
                 result = query.update(args[0], args[1:])
-                
-                pass
             elif query_type == INSERT_TYPE:
                 result = query.insert(args)
-                pass
             elif query_type == DELETE_TYPE:
                 result = query.delete(args)
-                pass
-            # result = query(*args)
-            # If the query has failed the transaction should abort
             if result is False:
                 return self.abort()
+            self.completed_queries.put((query, args, query_type))
         return self.commit()
 
     def abort(self):
+
         LOCK_MANAGER.abort(threading.currentThread().name)
         return False
 
