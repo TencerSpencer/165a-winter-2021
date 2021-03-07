@@ -63,3 +63,18 @@ class LockManager:
 
         self.__increment_read_counter(rid, set_type)
         return True
+
+    def abort(self, thread_name):
+        self.__shrink(thread_name)
+
+    def commit(self, thread_name):
+        self.__shrink(thread_name)
+
+    def __shrink(self, thread_name):
+        x_keys = [k for k, v in self.x_locks.items() if thread_name in v]
+        s_keys = [k for k, v in self.s_locks.items() if thread_name in v]
+
+        for key in x_keys:
+            self.x_locks[key].remove(thread_name)
+        for key in s_keys:
+            self.s_locks[key].remove(thread_name)

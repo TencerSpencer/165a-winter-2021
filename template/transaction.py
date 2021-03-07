@@ -1,6 +1,5 @@
-from template.table import Table, Record
 from template.query import Query
-from template.index import Index
+from template.config import *
 
 INSERT_TYPE = Query.insert
 UPDATE_TYPE = Query.update
@@ -57,9 +56,9 @@ class Transaction:
         return self.commit()
 
     def abort(self):
-        #TODO: do roll-back and any other necessary operations
+        LOCK_MANAGER.abort(threading.currentThread().name)
         return False
 
     def commit(self):
-        # TODO: commit to database
+        LOCK_MANAGER.commit(threading.currentThread().name)
         return True
