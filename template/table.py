@@ -3,6 +3,7 @@ from template.pageRange import PageRange
 from template.config import *
 from collections import deque
 
+
 class Record:
 
     def __init__(self, rid, key, columns):
@@ -113,7 +114,7 @@ class Table:
             self.page_ranges[page_range_index].add_tail_page_set_from_disk(page_set, page_set_index, trids,
                                                                            times, schema, indir, indir_t)
 
-            #new_block_start_index = self.__get_tail_block(page_range_index, page_set_index)
+            # new_block_start_index = self.__get_tail_block(page_range_index, page_set_index)
             self.__add_trids_to_key_directory_info(trids, block_start_index)
         LOCK_MANAGER.build_rid_lock(rid, set_type)
 
@@ -163,7 +164,7 @@ class Table:
                 if list(rid_dict.values()).count((curr_range, curr_base)) >= MERGE_THRESHOLD:
                     # merge base_page_set
                     self.__merge(curr_range, curr_base)
-                    #print("MERGE OCCURRED")
+                    # print("MERGE OCCURRED")
 
                 # no matter what, reinsert the base page set into the queue
                 self.merge_handler.full_base_page_sets.append((curr_range, curr_base))
@@ -172,7 +173,7 @@ class Table:
 
     def __merge(self, page_range_index, base_page_set_index):
         page_range = self.page_ranges[page_range_index]
-        #base_page_set = copy.deepcopy(page_range.base_page_sets[base_page_set_index])
+        # base_page_set = copy.deepcopy(page_range.base_page_sets[base_page_set_index])
         brids = [k for k, v in self.page_directory.items() if v[0] == page_range_index and v[1] == base_page_set_index]
         self.__check_if_base_loaded(brids[0])  # just need first one since all brids are in same page set
         for i in range(len(brids)):
@@ -182,7 +183,8 @@ class Table:
                 self.__check_if_tail_loaded(tail_rid, page_range_index)
                 data = page_range.get_record_with_specific_tail(brids[i], tail_rid, [1] * self.num_columns)
                 page_range.base_page_sets[base_page_set_index].overwrite_base_record(data, offset)
-       # page_range.base_page_sets[base_page_set_index] = base_page_set
+
+    # page_range.base_page_sets[base_page_set_index] = base_page_set
 
     def __add_brids_to_page_directory(self, brids, indir, indir_t, page_range_index, page_set_index):
         for i in range(len(brids)):
@@ -197,7 +199,7 @@ class Table:
             self.trid_block_start[rid] = block_start_index
 
     def insert_record(self, *columns):
-        
+
         key_col = self.key
         col_list = list(columns)
         key = col_list[key_col]
@@ -207,9 +209,7 @@ class Table:
         next_free_page_range_index = self.__get_next_available_page_range(new_rid)
         next_free_base_page_set_index = (new_rid // RECORDS_PER_PAGE) % PAGE_SETS
 
-        # Might need separate locks for assigning based on how we go about things, but for now
-        LOCK_MANAGER.build_rid_lock(new_rid, BASE_RID_TYPE)
-        if not LOCK_MANAGER.is_write_safe(new_rid, BASE_RID_TYPE):
+        if not LOCK_MANAGER.acquire_write_lock(new_rid, BASE_RID_TYPE):
             return False
 
         self.__increment_base_rid()
@@ -257,14 +257,14 @@ class Table:
             self.__check_if_tail_loaded(prev_tail_rid, page_range_index)
             prev_tail_rid = self.brid_to_trid[base_rid]
             # no need to block previous tails
-        
+
         new_tail_rid = self.next_tail_rid
 
         tail_page_set_index = new_tail_rid // RECORDS_PER_PAGE
         if self.page_ranges[page_range_index].tail_page_sets.get(tail_page_set_index) is None:
             page_set, _, _, _, _, _ = Bufferpool.unpack_data(
                 BUFFER_POOL.get_new_free_mem_space(self.name, page_range_index, tail_page_set_index, self.num_columns,
-                                                   TAIL_RID_TYPE))                                        
+                                                   TAIL_RID_TYPE))
             self.page_ranges[page_range_index].tail_page_sets[tail_page_set_index] = page_set
         elif self.__tail_page_sets_full(tail_page_set_index, page_range_index):
             tail_page_set_index += 1
@@ -273,15 +273,14 @@ class Table:
                                                    TAIL_RID_TYPE))
             self.page_ranges[page_range_index].tail_page_sets[tail_page_set_index] = page_set
 
-        LOCK_MANAGER.build_rid_lock(new_tail_rid, TAIL_RID_TYPE)
-        if not LOCK_MANAGER.is_write_safe(new_tail_rid, TAIL_RID_TYPE) and\
-                LOCK_MANAGER.is_read_safe(base_rid, BASE_RID_TYPE):
+        if not LOCK_MANAGER.acquire_write_lock(new_tail_rid, TAIL_RID_TYPE) or \
+                not LOCK_MANAGER.acquire_read_lock(base_rid, BASE_RID_TYPE):
             return False
-        
+
         self.__increment_tail_rid()
-        LOCK_MANAGER.__increment_write_counter(base_rid, BASE_RID_TYPE)
-        LOCK_MANAGER.__increment_write_counter(new_tail_rid, TAIL_RID_TYPE)
-        
+        #LOCK_MANAGER.__increment_write_counter(base_rid, BASE_RID_TYPE)
+        #LOCK_MANAGER.__increment_write_counter(new_tail_rid, TAIL_RID_TYPE)
+
         result = self.page_ranges[page_range_index].update_record(base_rid, new_tail_rid, columns, tail_page_set_index)
 
         # mark tail page set as dirty
@@ -307,8 +306,8 @@ class Table:
         if prev_tail_rid is not None:
             BUFFER_POOL.unpin_page_set(self.name, page_range_index, current_tail_page_set, TAIL_RID_TYPE)
 
-       # self.is_write_safe(page_range_index, tail_page_set_index, TAIL_RID_TYPE) & 
-                   # self.is_read_safe(page_range_index, base_page_set_index, BASE_RID_TYPE)):
+        # self.is_write_safe(page_range_index, tail_page_set_index, TAIL_RID_TYPE) &
+        # self.is_read_safe(page_range_index, base_page_set_index, BASE_RID_TYPE)):
 
         self.merge_handler.update_mutex.release()
 
@@ -319,10 +318,9 @@ class Table:
             next_block = self.disk.get_next_tail_block()
             self.tblock_directory[(page_range_index, tail_page_set)] = next_block
             return next_block
-            
+
         else:
             return self.tblock_directory[(page_range_index, tail_page_set)]
-
 
     def __tail_page_sets_full(self, page_set_index, page_range_index):
         if len(self.page_ranges[page_range_index].tail_page_sets) == 0:
@@ -345,9 +343,8 @@ class Table:
             tail_page_set_index = cur_page_range.tail_rids.get(tail_rid)[0]
             BUFFER_POOL.pin_page_set(self.name, page_range_index, tail_page_set_index, TAIL_RID_TYPE)
             # check if tail page set can be read
-            if not LOCK_MANAGER.is_read_safe(tail_rid, TAIL_RID_TYPE):
+            if not LOCK_MANAGER.acquire_read_lock(tail_rid, TAIL_RID_TYPE):
                 return False
-            LOCK_MANAGER.__increment_read_counter(tail_rid, TAIL_RID_TYPE)
 
         if not self.page_ranges[page_range_index].is_valid(brid):  # check if brid has been invalidated
             return False
@@ -356,9 +353,8 @@ class Table:
         base_page_set_index = cur_page_range.base_rids.get(brid)[0]
 
         # check is base page set can be read
-        if not LOCK_MANAGER.is_read_safe(brid, BASE_RID_TYPE):
+        if not LOCK_MANAGER.acquire_read_lock(brid, BASE_RID_TYPE):
             return False
-        LOCK_MANAGER.__increment_read_counter(brid, BASE_RID_TYPE)
 
         BUFFER_POOL.pin_page_set(self.name, page_range_index, base_page_set_index, BASE_RID_TYPE)
 
@@ -367,9 +363,6 @@ class Table:
         BUFFER_POOL.unpin_page_set(self.name, page_range_index, base_page_set_index, BASE_RID_TYPE)
         if tail_rid is not None:
             BUFFER_POOL.unpin_page_set(self.name, page_range_index, tail_page_set_index, TAIL_RID_TYPE)
-            LOCK_MANAGER.__decrement_read_counter(tail_rid, TAIL_RID_TYPE)
-
-        LOCK_MANAGER.__decrement_read_counter(brid, BASE_RID_TYPE)
 
         return brid, data
 
@@ -394,10 +387,9 @@ class Table:
             _, tail_rid = self.page_ranges[page_range_index].base_indirections[offset]
 
             # if we cannot write to the current base_indirection
-            if not LOCK_MANAGER.is_write_safe(brid, BASE_RID_TYPE) and \
-                    not LOCK_MANAGER.is_write_safe(tail_rid, TAIL_RID_TYPE):
+            if not LOCK_MANAGER.acquire_write_lock(brid, BASE_RID_TYPE) or\
+                not LOCK_MANAGER.acquire_write_lock(tail_rid, TAIL_RID_TYPE):
                 return False
-            LOCK_MANAGER.__increment_write_counter(brid, BASE_RID_TYPE)
 
             if tail_rid:
                 LOCK_MANAGER.__increment_write_counter(tail_rid, TAIL_RID_TYPE)
