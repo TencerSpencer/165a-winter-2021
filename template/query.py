@@ -56,14 +56,12 @@ class Query:
 
     def select(self, key, column, query_columns):
         data = []
-        if column != self.table.key and self.table.index != None:
-            if not self.table.index.is_index_built(column):  # if index is not built..
-                self.table.index.create_index(column)
+        if column != self.table.key and self.table.index != None and self.table.index.is_index_built(column):
             rids = self.table.index.locate(column, key)
             for rid in rids:
                 record = self.table.select_record_using_rid(rid, query_columns)
                 data.append(Record(record[0], record[1][self.table.key], record[1]))
-        elif column != self.table.key and self.table.index == None:
+        elif column != self.table.key:
             # iterate over selections to see if the selected col value in column column == key
             for globalKey in self.table.keys.keys():
                 record = self.table.select_record(globalKey, [1]*self.table.num_columns)
@@ -73,10 +71,8 @@ class Query:
         else:
             data = self.table.select_record(key, query_columns)
             if data:
-                # print([data[1]])
-                records = [Record(data[0], key, data[1])]
-                return records
-                # return [data[1]]
+                record = [Record(data[0], key, data[1])]
+                return record
         if data == False or len(data) == 0:
             return [False]
         return data
