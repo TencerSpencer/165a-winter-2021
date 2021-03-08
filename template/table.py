@@ -134,9 +134,9 @@ class Table:
                     self.merge_handler.thread_in_crit_section = False
                     self.merge_handler.update_mutex.release()
 
+            self.merge_handler.next_time_to_call = self.merge_handler.next_time_to_call + MERGE_TIMER_INTERVAL
             self.merge_handler.thread = threading.Timer(self.merge_handler.next_time_to_call - time.time(),
                                                         self.__merge_callback)
-            self.merge_handler.next_time_to_call = self.merge_handler.next_time_to_call + MERGE_TIMER_INTERVAL
             self.merge_handler.thread.start()
 
     def shut_down_timer(self):  # if constant printing is occurring, this wont properly stop
