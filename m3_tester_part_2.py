@@ -3,7 +3,7 @@ from template.query import Query
 from template.transaction import Transaction
 from template.transaction_worker import TransactionWorker
 from template.config import init
-
+from template.lock_manager_config import *
 from random import choice, randint, sample, seed
 
 init()
@@ -77,6 +77,9 @@ for transaction_worker in transaction_workers:
     transaction_worker.run()
 
 score = len(keys)
+for _ in range(len(LOCK_MANAGER.workers_list)):
+    current_thread_to_join = LOCK_MANAGER.workers_list.pop()
+    current_thread_to_join.join()
 for key in keys:
     correct = records[key]
     query = Query(grades_table)

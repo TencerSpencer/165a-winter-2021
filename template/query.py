@@ -21,14 +21,14 @@ class Query:
     """
 
     def delete(self, key):
-            # Remove all entries from built indices
-            rid, columns = self.table.select_record(key, [1]*self.table.num_columns)
-            if self.table.index != None:
-                for i in range(self.table.num_columns):
-                    if self.table.index.is_index_built(i):
-                        self.table.index.delete(i, columns[i], rid)
-            # Remove the record from the table
-            return self.table.remove_record(key)
+        # Remove all entries from built indices
+        rid, columns = self.table.select_record(key, [1] * self.table.num_columns)
+        if self.table.index != None:
+            for i in range(self.table.num_columns):
+                if self.table.index.is_index_built(i):
+                    self.table.index.delete(i, columns[i], rid)
+        # Remove the record from the table
+        return self.table.remove_record(key)
 
     """
     # Insert a record with specified columns
@@ -56,42 +56,58 @@ class Query:
 
     def select(self, key, column, query_columns):
         data = []
-        if column != self.table.key:
-            if self.table.index == None:
-                self.table.index = Index(self.table)
-            # MUST build an index on column
-            if not self.table.index.is_index_built(column):  # if index is not built..
-                self.table.index.create_index(column)
+        if column != self.table.key and self.table.index != None and self.table.index.is_index_built(column):
             rids = self.table.index.locate(column, key)
             for rid in rids:
                 record = self.table.select_record_using_rid(rid, query_columns)
-                data.append(Record(record[0], record[1][self.table.key], record[1]))
-
+                if record:
+                    data.append(Record(record[0], record[1][self.table.key], record[1]))
+                else:
+                    return False
+        elif column != self.table.key:
+            # iterate over selections to see if the selected col value in column column == key
+            for globalKey in self.table.keys.keys():
+                record = self.table.select_record(globalKey, [1] * self.table.num_columns)
+                if not record:
+                    return False
+                if record[1][column] == key:
+                    # Found a match, add it to data
+                    data.append(Record(record[0], globalKey, self.__trim(record[1], query_columns)))
         else:
             data = self.table.select_record(key, query_columns)
             if data:
-                # print([data[1]])
-                records = [Record(data[0], key, data[1])]
-                return records
-                # return [data[1]]
+                record = [Record(data[0], key, data[1])]
+                return record
         if data == False or len(data) == 0:
-            return [False]
+            return False
         return data
 
-    """ select_range requires that an index be built on the query column
-        INCLUSIVE """
+    def __trim(self, to_trim, query_columns):
+        output = []
+        for i in range(len(to_trim)):
+            if query_columns[i] != None:
+                output.append(to_trim[i])
+            else:
+                output.append(None)
+        return output
+
+    """ INCLUSIVE!!!"""
 
     def select_range(self, begin, end, column, query_columns):
-        if self.table.index == None:
-            self.table.index = Index(self.table)
         data = []
-        if not self.table.index.is_index_built(column):
-            self.table.index.create_index(column)
-        RIDs = self.table.index.locate_range(column, begin, end)
-        for rid in RIDs:
-            raw = self.table.select_record_using_rid(rid, query_columns)
-            record = Record(raw[0], raw[1][self.table.key], raw[1])
-            data.append(record)
+        if self.table.index != None and self.table.index.is_index_built(column):
+            RIDs = self.table.index.locate_range(column, begin, end)
+            for rid in RIDs:
+                raw = self.table.select_record_using_rid(rid, query_columns)
+                record = Record(raw[0], raw[1][self.table.key], raw[1])
+                data.append(record)
+        else:
+            # Need to brute force it
+            for globalKey in self.table.keys.keys():
+                record = self.table.select_record(globalKey, [1] * self.table.num_columns)
+                if record[1][column] >= begin and record[1][column] <= end:
+                    # Found a match, add it to data
+                    data.append(Record(record[0], globalKey, record[1]))
         return data
 
     """

@@ -23,7 +23,7 @@ class LockManager:
             self.s_locks[(rid, set_type)] = []
 
     def is_read_safe(self, rid, set_type):
-        val = self.x_locks.get(rid, set_type)
+        val = self.x_locks.get((rid, set_type))
         if val:
             return val[0] == threading.currentThread().name
 
@@ -31,10 +31,7 @@ class LockManager:
 
     # mutex is acquired here
     def is_write_safe(self, rid, set_type):
-        shared = self.s_locks.get(rid, set_type)
-
-        if shared == 0:
-            shared = []
+        shared = self.s_locks.get((rid, set_type))
 
         if len(shared) > 1:
             return False
@@ -42,7 +39,7 @@ class LockManager:
             if shared[0] != threading.currentThread().name:
                 return False
 
-        exclusive = self.x_locks.get(rid, set_type)
+        exclusive = self.x_locks.get((rid, set_type))
         if exclusive:
             return exclusive[0] == threading.currentThread().name
 
@@ -90,7 +87,7 @@ class LockManager:
             self.x_locks[key].remove(thread_name)
         for key in s_keys:
             self.s_locks[key].remove(thread_name)
-
+        pass
 
     def add_to_thread_list(self, thread):
         self.workers_list.append(thread)

@@ -1,5 +1,5 @@
 from template.config import *
-
+import threading
 """
 A data structure holding indices for various columns of a table. Key column should be indexed by default, other columns can be indexed through this object. Indices are usually B-Trees, but other data structures can be used as well.
 In-Memory ONLY
@@ -9,6 +9,7 @@ In-Memory ONLY
 class Index:
 
     def __init__(self, table):
+        self.lock = threading.Lock()
         table.set_index(self)
         self.table = table
         self.indices = [None] * table.num_columns
@@ -21,37 +22,39 @@ class Index:
     """
 
     def locate(self, column, value):
-        indexRhash = self.indices[column]
-        # indexRhash[value].rids 
-        return indexRhash.get(value)  # returns all RIDs
+        with self.lock:
+            return self.indices[column].get(value)
 
     """
     # Returns the RIDs of all records with values in column "column" between "begin" and "end"
     """
 
     def locate_range(self, column, begin, end):
-        return self.indices[column].get_range(begin, end)
+        with self.lock:
+            return self.indices[column].get_range(begin, end)
 
     """
     # optional: Create index on specific column
     """
 
     def create_index(self, column_number):
-        query_cols = [None] * self.table.num_columns
-        query_cols[column_number] = 1
-        # [None, None, 1, None, None]
-        for key in self.table.keys:
-            record = self.table.select_record(key, query_cols)
-            self.indices[column_number].insert(record[1][column_number], record[0], False)
-        self.indices[column_number].check_and_build_seeds(False)
-        self.isBuilt[column_number] = True
+        with self.lock:
+            query_cols = [None] * self.table.num_columns
+            query_cols[column_number] = 1
+            # [None, None, 1, None, None]
+            for key in self.table.keys:
+                record = self.table.select_record(key, query_cols)
+                self.indices[column_number].insert(record[1][column_number], record[0], False)
+            self.indices[column_number].check_and_build_seeds(False)
+            self.isBuilt[column_number] = True
 
     """ Checks if the index is built for column 'column' """
 
     def is_index_built(self, column_number):
-        if column_number >= self.table.num_columns:
-            return False
-        return self.isBuilt[column_number]
+        with self.lock:
+            if column_number >= self.table.num_columns:
+                return False
+            return self.isBuilt[column_number]
 
     """
     # optional: Drop index of specific column
