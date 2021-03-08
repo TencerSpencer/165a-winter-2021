@@ -25,6 +25,7 @@ class Bufferpool:
                      block_start_index):
 
         # if data is not in memory
+        LOCK_MANAGER.latches[PAGES_MEM_MAP_BLOCK].acquire()
         if not self.pages_mem_mapping.get((table_name, page_range_index, page_set_index, set_type)):
             data = self.__load_page_set(disk, num_columns, set_type, block_start_index)
             # append datapoint to lru_enforcement and add to current page tiles
@@ -37,6 +38,8 @@ class Bufferpool:
             # reset its position in lru
             self.lru_enforcement.remove((table_name, page_range_index, page_set_index, set_type))
             self.lru_enforcement.append((table_name, page_range_index, page_set_index, set_type))
+
+        LOCK_MANAGER.latches[PAGES_MEM_MAP_BLOCK].release()
 
         # pin page, for its in use
         #self.pinned_page_sets[(table_name, page_range_index, page_set_index, set_type)] = 1
@@ -141,6 +144,7 @@ class Bufferpool:
         # also mark table_name, page_set_index as being in use right now
 
     def pin_page_set(self, table_name, page_range_index, page_set_index, set_type):
+        LOCK_MANAGER.latches[PIN_PAGE_SET].acquire()
         # start at zero and build up
         if not self.pinned_page_sets.get((table_name, page_range_index, page_set_index, set_type)):
              # add pair with 1 to indicate we just started pinning
@@ -148,18 +152,20 @@ class Bufferpool:
         else:
             # increase the amount of users using the page, for M3 safe keeping
             self.pinned_page_sets[(table_name, page_range_index, page_set_index, set_type)] += 1
+        LOCK_MANAGER.latches[PIN_PAGE_SET].release()
 
     def __is_dirty(self, table_name, page_range_index, page_set_index, set_type):
         return (table_name, page_range_index, page_set_index, set_type) in self.dirty_page_sets
 
     # called from table when the ref counter needs to be dec/removed
     def unpin_page_set(self, table_name, page_range_index, page_set_index, set_type):
-
+        LOCK_MANAGER.latches[UNPIN_PAGE_SET].acquire()
         self.pinned_page_sets[(table_name, page_range_index, page_set_index, set_type)] -= 1
 
         # if the page is no longer in use, remove it from the mapping, in m3 we may decide to keep it
         if self.pinned_page_sets.get((table_name, page_range_index, page_set_index, set_type)) == 0:
             self.pinned_page_sets.pop((table_name, page_range_index, page_set_index, set_type))
+        LOCK_MANAGER.latches[UNPIN_PAGE_SET].release()
 
     # write dirty data to disk
     def flush_buffer_pool(self):

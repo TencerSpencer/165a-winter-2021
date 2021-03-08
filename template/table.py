@@ -382,7 +382,7 @@ class Table:
     def __check_if_base_loaded(self, rid):
         LOCK_MANAGER.latches[BASE_LOADED].acquire()
         page_dir_info = self.page_directory.get(rid)
-        if not page_dir_info and self.brid_to_trid.get(rid):
+        if not page_dir_info and self.brid_to_trid.get(rid) is not None:
             page_range_index = rid // (RECORDS_PER_PAGE * PAGE_SETS)
             self.__load_record_from_disk(rid, page_range_index, BASE_RID_TYPE)
         LOCK_MANAGER.latches[BASE_LOADED].release()
@@ -391,7 +391,7 @@ class Table:
         LOCK_MANAGER.latches[TAIL_LOADED].acquire()
         # check if tail page page set needs to be loaded
         if rid:
-            if self.page_ranges[page_range_index].tail_rids.get(rid) is None and self.trid_block_start.get(rid):
+            if self.page_ranges[page_range_index].tail_rids.get(rid) is None and self.trid_block_start.get(rid) is not None:
                 self.__load_record_from_disk(rid, page_range_index, TAIL_RID_TYPE)
         LOCK_MANAGER.latches[TAIL_LOADED].release()
 
