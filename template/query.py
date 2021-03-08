@@ -21,14 +21,14 @@ class Query:
     """
 
     def delete(self, key):
-            # Remove all entries from built indices
-            rid, columns = self.table.select_record(key, [1]*self.table.num_columns)
-            if self.table.index != None:
-                for i in range(self.table.num_columns):
-                    if self.table.index.is_index_built(i):
-                        self.table.index.delete(i, columns[i], rid)
-            # Remove the record from the table
-            return self.table.remove_record(key)
+        # Remove all entries from built indices
+        rid, columns = self.table.select_record(key, [1]*self.table.num_columns)
+        if self.table.index != None:
+            for i in range(self.table.num_columns):
+                if self.table.index.is_index_built(i):
+                    self.table.index.delete(i, columns[i], rid)
+        # Remove the record from the table
+        return self.table.remove_record(key)
 
     """
     # Insert a record with specified columns
@@ -60,11 +60,16 @@ class Query:
             rids = self.table.index.locate(column, key)
             for rid in rids:
                 record = self.table.select_record_using_rid(rid, query_columns)
-                data.append(Record(record[0], record[1][self.table.key], record[1]))
+                if record:
+                    data.append(Record(record[0], record[1][self.table.key], record[1]))
+                else:
+                    return False
         elif column != self.table.key:
             # iterate over selections to see if the selected col value in column column == key
             for globalKey in self.table.keys.keys():
                 record = self.table.select_record(globalKey, [1]*self.table.num_columns)
+                if not record:
+                    return False
                 if record[1][column] == key:
                     # Found a match, add it to data
                     data.append(Record(record[0], globalKey, self.__trim(record[1], query_columns)))
@@ -74,7 +79,7 @@ class Query:
                 record = [Record(data[0], key, data[1])]
                 return record
         if data == False or len(data) == 0:
-            return [False]
+            return False
         return data
     
     def __trim(self, to_trim, query_columns):
