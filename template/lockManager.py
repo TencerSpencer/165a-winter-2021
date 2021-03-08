@@ -1,4 +1,3 @@
-from template.config import *
 import threading
 
 
