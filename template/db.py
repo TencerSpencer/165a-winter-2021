@@ -3,6 +3,7 @@ from template.disk import *
 from template.bufferpool import Bufferpool
 from template.lockManager import *
 from template.lock_manager_config import *
+from template.index import *
 
 class Database():
     def __init__(self):

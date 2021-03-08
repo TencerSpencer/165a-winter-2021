@@ -12,7 +12,7 @@ class LockManager:
 
     def build_latches(self):
         lower_bound = 40
-        upper_bound = 45
+        upper_bound = 49
         for i in range(lower_bound, upper_bound):
             self.latches[i] = threading.Lock()
 
@@ -33,6 +33,9 @@ class LockManager:
     # mutex is acquired here
     def is_write_safe(self, rid, set_type):
         shared = self.s_locks.get(rid, set_type)
+
+        if shared == 0:
+            shared = []
 
         if len(shared) > 1:
             return False

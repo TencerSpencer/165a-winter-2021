@@ -14,7 +14,6 @@ class TransactionWorker:
         self.stats = []
         self.transactions = transactions
         self.result = 0
-        self.local_page_sets
         self.worker_thread = threading.Thread(target = self.__execute_transactions)
         LOCK_MANAGER.add_to_thread_list(self.worker_thread)
         pass

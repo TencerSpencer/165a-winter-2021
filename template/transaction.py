@@ -40,13 +40,13 @@ class Transaction:
         result = None
         for query, args, query_type in self.queries:
             if query_type == SELECT_TYPE:
-                result = query.select(args[0], args[1], args[2:])
+                result = query(args[0], args[1], args[2:])
             elif query_type == UPDATE_TYPE:
-                result = query.update(args[0], args[1:])
+                result = query(args[0], args[1:])
             elif query_type == INSERT_TYPE:
-                result = query.insert(args)
+                result = query(args)
             elif query_type == DELETE_TYPE:
-                result = query.delete(args)
+                result = query(args)
             if result is False:
                 return self.abort()
             self.completed_queries.put((query, args, query_type))
