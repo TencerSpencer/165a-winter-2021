@@ -1,5 +1,4 @@
 from template.bufferpool import Bufferpool
-from template.lockManager import *
 
 START_RID = 0
 PAGE_SETS = 16
@@ -20,8 +19,9 @@ MERGE_TIMER_INTERVAL = 7 # every 7 seconds, the merge check will be called
 MERGE_THRESHOLD = 100 # how many base records out of a base page set must be updated to perform a merge
 NUMBER_OF_BASE_PAGE_SETS_TO_CHECK = 3 # at any given time, we will check 3 base page sets to merge
 
+
+
 BUFFER_POOL = Bufferpool()
-LOCK_MANAGER = LockManager()
 
 def init():
     pass

@@ -1,7 +1,9 @@
+from template.lock_manager_config import *
 import copy, time
 from template.pageRange import PageRange
 from template.config import *
 from collections import deque
+import threading
 
 
 class Record:
@@ -204,6 +206,7 @@ class Table:
         col_list = list(columns)
         key = col_list[key_col]
 
+        LOCK_MANAGER.latches[NEW_BASE_RID_INSERT].acquire()
         new_rid = self.next_base_rid
 
         next_free_page_range_index = self.__get_next_available_page_range(new_rid)
@@ -213,6 +216,7 @@ class Table:
             return False
 
         self.__increment_base_rid()
+        LOCK_MANAGER.latches[NEW_BASE_RID_INSERT].release()
 
         BUFFER_POOL.pin_page_set(self.name, next_free_page_range_index, next_free_base_page_set_index, BASE_RID_TYPE)
 
@@ -257,7 +261,8 @@ class Table:
             self.__check_if_tail_loaded(prev_tail_rid, page_range_index)
             prev_tail_rid = self.brid_to_trid[base_rid]
             # no need to block previous tails
-
+        
+        LOCK_MANAGER.latches[NEW_TAIL_RID_UPDATE].acquire()
         new_tail_rid = self.next_tail_rid
 
         tail_page_set_index = new_tail_rid // RECORDS_PER_PAGE
@@ -278,6 +283,7 @@ class Table:
             return False
 
         self.__increment_tail_rid()
+        LOCK_MANAGER.latches[NEW_TAIL_RID_UPDATE].release()
         #LOCK_MANAGER.__increment_write_counter(base_rid, BASE_RID_TYPE)
         #LOCK_MANAGER.__increment_write_counter(new_tail_rid, TAIL_RID_TYPE)
 
@@ -314,13 +320,17 @@ class Table:
         return result
 
     def __get_tail_block(self, page_range_index, tail_page_set):
+        LOCK_MANAGER.latches[NEXT_TAIL_BLOCK_CALC].acquire()
+        block = None
         if self.tblock_directory.get((page_range_index, tail_page_set)) is None:
-            next_block = self.disk.get_next_tail_block()
-            self.tblock_directory[(page_range_index, tail_page_set)] = next_block
-            return next_block
+            block = self.disk.get_next_tail_block()
+            self.tblock_directory[(page_range_index, tail_page_set)] = block
 
         else:
-            return self.tblock_directory[(page_range_index, tail_page_set)]
+            block = self.tblock_directory[(page_range_index, tail_page_set)]
+        
+        LOCK_MANAGER.latches[NEXT_TAIL_BLOCK_CALC].release()
+        return block
 
     def __tail_page_sets_full(self, page_set_index, page_range_index):
         if len(self.page_ranges[page_range_index].tail_page_sets) == 0:
@@ -367,16 +377,20 @@ class Table:
         return brid, data
 
     def __check_if_base_loaded(self, rid):
+        LOCK_MANAGER.latches[BASE_LOADED].acquire()
         page_dir_info = self.page_directory.get(rid)
         if not page_dir_info:
             page_range_index = rid // (RECORDS_PER_PAGE * PAGE_SETS)
             self.__load_record_from_disk(rid, page_range_index, BASE_RID_TYPE)
+        LOCK_MANAGER.latches[BASE_LOADED].release()
 
     def __check_if_tail_loaded(self, rid, page_range_index):
+        LOCK_MANAGER.latches[TAIL_LOADED].acquire()
         # check if tail page page set needs to be loaded
         if rid:
             if self.page_ranges[page_range_index].tail_rids.get(rid) is None:
                 self.__load_record_from_disk(rid, page_range_index, TAIL_RID_TYPE)
+        LOCK_MANAGER.latches[TAIL_LOADED].release()
 
     def remove_record(self, key):
         if key in self.keys:
@@ -411,6 +425,8 @@ class Table:
 
     # returns an index of the next available page range
     def __get_next_available_page_range(self, new_rid):
+
+        LOCK_MANAGER.latches[AVAILABLE_PAGE_RANGE].acquire()        
         page_range_index = new_rid // (RECORDS_PER_PAGE * PAGE_SETS)
         if self.page_ranges.get(page_range_index) is None:  # page range doesn't exist
             new_page_range = PageRange(self.num_columns)
@@ -420,6 +436,8 @@ class Table:
                 new_page_range.base_page_sets[i] = page_set
             page_range_index = new_rid // (RECORDS_PER_PAGE * PAGE_SETS)
             self.page_ranges[page_range_index] = new_page_range
+        
+        LOCK_MANAGER.latches[AVAILABLE_PAGE_RANGE].release()
         return page_range_index
 
     def get_meta_data(self, page_range_index, page_set_index, set_type):

@@ -6,6 +6,16 @@ class LockManager:
     def __init__(self):
         self.x_locks = {}
         self.s_locks = {}
+        self.latches = {}
+        self.build_latches()
+        self.workers_list = []
+
+    def build_latches(self):
+        lower_bound = 40
+        upper_bound = 45
+        for i in range(lower_bound, upper_bound):
+            self.latches[i] = threading.Lock()
+
 
     def build_rid_lock(self, rid, set_type):
         if self.x_locks.get((rid, set_type)) is None:
@@ -78,3 +88,7 @@ class LockManager:
             self.x_locks[key].remove(thread_name)
         for key in s_keys:
             self.s_locks[key].remove(thread_name)
+
+
+    def add_to_thread_list(self, thread):
+        self.workers_list.append(thread)

@@ -142,6 +142,7 @@ class Disk:
         return keys, brids, brids_to_trids, base_block_starts, tail_block_starts
 
     def write_key_directory_set(self, keys, brids_to_trids, base_block_starts, tail_block_starts):
+        
         data = bytearray(0)
         k = list(keys.keys())
         brids = list(keys.values())

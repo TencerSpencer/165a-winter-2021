@@ -1,5 +1,7 @@
+import threading
 from template.query import Query
 from template.config import *
+from template.lock_manager_config import *
 import queue
 
 INSERT_TYPE = Query.insert
@@ -56,5 +58,6 @@ class Transaction:
         return False
 
     def commit(self):
+        
         LOCK_MANAGER.commit(threading.currentThread().name)
         return True

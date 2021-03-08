@@ -1,4 +1,5 @@
 from template.bufferpool_config import *
+from template.lock_manager_config import *
 from collections import deque
 from template.pageSet import PageSet
 from template.tools import *
@@ -48,12 +49,14 @@ class Bufferpool:
 
         data = None
 
+        LOCK_MANAGER.latches[DISK_ACCESS].acquire()
         if set_type == BASE_RID_TYPE:
             data = disk.read_base_page_set(block_start_index)
 
         elif set_type == TAIL_RID_TYPE:  # we have a tail to bring in,
             data = disk.read_tail_page_set(block_start_index)
 
+        LOCK_MANAGER.latches[DISK_ACCESS].release()
         return data
 
     # kick out least recently used page from queue
@@ -223,6 +226,9 @@ class Bufferpool:
 
     # To write to disk, pack like how I'm reading it, where last 3 pages are meta data
     def __write_to_disk(self, table_name, page_range_index, page_set_index, set_type, meta):
+        
+        LOCK_MANAGER.latches[DISK_ACCESS].acquire()
+
         data, num_columns = self.pages_mem_mapping[(table_name, page_range_index, page_set_index, set_type)]
         self.__update_meta_data(data, meta)
         table = self.tables[table_name]
@@ -235,6 +241,8 @@ class Bufferpool:
             rid = [k for k, v in table.page_ranges[page_range_index].tail_rids.items() if v[0] == page_set_index]
             block_start_index = table.trid_block_start[rid[0]]  # just need a single rid that has the block start index
             disk.write_tail_page_set(data, block_start_index)
+        
+        LOCK_MANAGER.latches[DISK_ACCESS].release()
 
     def __update_meta_data(self, data, meta):
         rids = meta[0]
