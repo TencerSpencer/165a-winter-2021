@@ -203,7 +203,7 @@ class Table:
     def insert_record(self, *columns):
 
         key_col = self.key
-        cols = list(columns[0])
+        cols = list(columns)
         key = cols[key_col]
 
         LOCK_MANAGER.latches[NEW_BASE_RID_INSERT].acquire()
@@ -211,6 +211,9 @@ class Table:
 
         next_free_page_range_index = self.__get_next_available_page_range(new_rid)
         next_free_base_page_set_index = (new_rid // RECORDS_PER_PAGE) % PAGE_SETS
+
+        # check if we need to load previous rid's page set since it could be incomplete
+        self.__check_if_base_loaded(new_rid - 1)
 
         if not LOCK_MANAGER.acquire_write_lock(new_rid, BASE_RID_TYPE):
             return False
@@ -379,7 +382,7 @@ class Table:
     def __check_if_base_loaded(self, rid):
         LOCK_MANAGER.latches[BASE_LOADED].acquire()
         page_dir_info = self.page_directory.get(rid)
-        if not page_dir_info:
+        if not page_dir_info and self.brid_to_trid.get(rid):
             page_range_index = rid // (RECORDS_PER_PAGE * PAGE_SETS)
             self.__load_record_from_disk(rid, page_range_index, BASE_RID_TYPE)
         LOCK_MANAGER.latches[BASE_LOADED].release()
@@ -388,7 +391,7 @@ class Table:
         LOCK_MANAGER.latches[TAIL_LOADED].acquire()
         # check if tail page page set needs to be loaded
         if rid:
-            if self.page_ranges[page_range_index].tail_rids.get(rid) is None:
+            if self.page_ranges[page_range_index].tail_rids.get(rid) is None and self.trid_block_start.get(rid):
                 self.__load_record_from_disk(rid, page_range_index, TAIL_RID_TYPE)
         LOCK_MANAGER.latches[TAIL_LOADED].release()
 
