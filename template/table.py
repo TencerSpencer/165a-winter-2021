@@ -216,16 +216,19 @@ class Table:
         next_free_page_range_index = self.__get_next_available_page_range(new_rid)
         next_free_base_page_set_index = (new_rid // RECORDS_PER_PAGE) % PAGE_SETS
 
-        # check if we need to load previous rid's page set since it could be incomplete
-        self.__check_if_base_loaded(new_rid - 1)
-
         if not LOCK_MANAGER.acquire_write_lock(new_rid, BASE_RID_TYPE):
+            # NOTE: IT IS VERY IMPORTANT TO RELEASE HERE IF WE CANNOT ACQUIRE A WRITE LOCK.
+            LOCK_MANAGER.latches[NEW_BASE_RID_INSERT].release()
             return False
 
         self.__increment_base_rid()
         LOCK_MANAGER.latches[NEW_BASE_RID_INSERT].release()
 
         BUFFER_POOL.pin_page_set(self.name, next_free_page_range_index, next_free_base_page_set_index, BASE_RID_TYPE)
+
+        # Moved this beyond the lock manager latch to lower runtime
+        # check if we need to load previous rid's page set since it could be incomplete
+        self.__check_if_base_loaded(new_rid - 1)
 
         # set key and rid mappings
         self.keys[key] = new_rid
@@ -287,6 +290,7 @@ class Table:
 
         if not LOCK_MANAGER.acquire_write_lock(new_tail_rid, TAIL_RID_TYPE) or \
                 not LOCK_MANAGER.acquire_read_lock(base_rid, BASE_RID_TYPE):
+            LOCK_MANAGER.latches[NEW_TAIL_RID_UPDATE].release()
             return False
 
         self.__increment_tail_rid()
@@ -385,8 +389,8 @@ class Table:
         return brid, data
 
     def __check_if_base_loaded(self, rid):
-        LOCK_MANAGER.latches[BASE_LOADED].acquire()
         page_dir_info = self.page_directory.get(rid)
+        LOCK_MANAGER.latches[BASE_LOADED].acquire()
         if not page_dir_info and self.brid_to_trid.get(rid) is not None:
             page_range_index = rid // (RECORDS_PER_PAGE * PAGE_SETS)
             self.__load_record_from_disk(rid, page_range_index, BASE_RID_TYPE)
@@ -434,8 +438,9 @@ class Table:
     # returns an index of the next available page range
     def __get_next_available_page_range(self, new_rid):
 
-        LOCK_MANAGER.latches[AVAILABLE_PAGE_RANGE].acquire()        
+        # For optimization purposes, we must lessen the how often we use latches
         page_range_index = new_rid // (RECORDS_PER_PAGE * PAGE_SETS)
+        LOCK_MANAGER.latches[AVAILABLE_PAGE_RANGE].acquire()     
         if self.page_ranges.get(page_range_index) is None:  # page range doesn't exist
             new_page_range = PageRange(self.num_columns)
             for i in range(PAGE_SETS):

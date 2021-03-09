@@ -48,7 +48,9 @@ class Bufferpool:
 
     def __load_page_set(self, disk, num_columns, set_type, block_start_index):
         
-        LOCK_MANAGER.latches[DISK_ACCESS].acquire()
+        # This may not need to be locked due to the fact that we use a latch on ensure_buffer_pool_can_fit
+
+        # LOCK_MANAGER.latches[DISK_ACCESS].acquire()
         # we must first evict pages before we load them in
         self.__ensure_buffer_pool_can_fit_new_data(num_columns)
 
@@ -60,7 +62,7 @@ class Bufferpool:
         elif set_type == TAIL_RID_TYPE:  # we have a tail to bring in,
             data = disk.read_tail_page_set(block_start_index)
 
-        LOCK_MANAGER.latches[DISK_ACCESS].release()
+        # LOCK_MANAGER.latches[DISK_ACCESS].release()
         return data
 
     # kick out least recently used page from queue
@@ -85,6 +87,7 @@ class Bufferpool:
     # evaluate if page is dirty then remove any traces
     def __evict_page_set(self, table_name, page_range_index, page_set_index, set_type):
         
+        # this mutex may possibly be shortened
         LOCK_MANAGER.latches[PAGE_SET_EVICTION].acquire()
         
         if self.__is_dirty(table_name, page_range_index, page_set_index, set_type):
@@ -100,6 +103,11 @@ class Bufferpool:
         # remove entry from dictionary
         self.pages_mem_mapping.pop((table_name, page_range_index, page_set_index, set_type))
         self.dirty_page_sets.discard((table_name, page_range_index, page_set_index, set_type))
+        
+        
+        # This lock does not need to be extended because multiple calls to this function from the same page_set
+        # will fail once the dirt page set is discarded
+        LOCK_MANAGER.latches[PAGE_SET_EVICTION].release()
 
         # get the current table 
         current_table = self.tables[table_name]
@@ -110,8 +118,11 @@ class Bufferpool:
         except ValueError:
             pass
 
+
         # remove its base rids from the page directory
         if (set_type == 0):
+
+            # TODO: May need a page directory lock here
             rids = [k for k, v in current_table.page_directory.items() if v[0] == page_range_index and v[1] == page_set_index]
             for i in range(len(rids)):
                 offset = current_page_range.base_rids[rids[i]][1]
@@ -132,8 +143,6 @@ class Bufferpool:
                 current_page_range.tail_timestamps.pop(offset)
                 current_page_range.tail_rids.pop(rids[i])
             current_page_range.tail_page_sets.pop(page_set_index)
-        
-        LOCK_MANAGER.latches[PAGE_SET_EVICTION].release()
 
 
 
@@ -243,13 +252,17 @@ class Bufferpool:
     # To write to disk, pack like how I'm reading it, where last 3 pages are meta data
     def __write_to_disk(self, table_name, page_range_index, page_set_index, set_type, meta):
         
-        LOCK_MANAGER.latches[DISK_ACCESS].acquire()
+        # This will now lock at the disk level instead, in order to increase speeds
+        # LOCK_MANAGER.latches[DISK_ACCESS].acquire()
 
         data, num_columns = self.pages_mem_mapping[(table_name, page_range_index, page_set_index, set_type)]
         self.__update_meta_data(data, meta)
         table = self.tables[table_name]
         disk = self.tables[table_name].disk
         if set_type is BASE_RID_TYPE:
+            
+            # TODO: IS THERE SUPPOSE TO BE A LATCH HERE FOR PAGE DIRECTORY ACCESS?
+            
             rid = [k for k, v in table.page_directory.items() if v[0] == page_range_index and v[1] == page_set_index]
             block_start_index = table.brid_block_start[rid[0]]  # just need a single rid that has the block start index
             disk.write_base_page_set(data, block_start_index)
@@ -258,7 +271,7 @@ class Bufferpool:
             block_start_index = table.trid_block_start[rid[0]]  # just need a single rid that has the block start index
             disk.write_tail_page_set(data, block_start_index)
         
-        LOCK_MANAGER.latches[DISK_ACCESS].release()
+        # LOCK_MANAGER.latches[DISK_ACCESS].release()
 
     def __update_meta_data(self, data, meta):
         rids = meta[0]

@@ -208,15 +208,17 @@ class Disk:
             f.write(data)
 
     def read_base_page_set(self, block_start_index):
+        LOCK_MANAGER.latches[DISK_ACCESS].acquire()
         page_set = PageSet(self.num_columns + META_DATA_PAGES)
         with open(self.base_fn, "rb") as f:
             f.seek(block_start_index * PAGE_SIZE)
             for i in range(self.num_columns + META_DATA_PAGES):
                 page_set.pages[i].data = f.read(PAGE_SIZE)
-
+        LOCK_MANAGER.latches[DISK_ACCESS].release()
         return page_set
 
     def write_base_page_set(self, page_set, block_start_index):
+        LOCK_MANAGER.latches[DISK_ACCESS].acquire()
         with open(self.base_fn, "r+b") as f:
             file_size = os.path.getsize(self.base_fn)
             if file_size < block_start_index * PAGE_SIZE:
@@ -226,17 +228,20 @@ class Disk:
             f.seek(block_start_index * PAGE_SIZE)
             for i in range(self.num_columns + META_DATA_PAGES):
                 f.write(page_set.pages[i].data)
+        LOCK_MANAGER.latches[DISK_ACCESS].release()
 
     def read_tail_page_set(self, block_start_index):
+        LOCK_MANAGER.latches[DISK_ACCESS].acquire()
         page_set = PageSet(self.num_columns + META_DATA_PAGES)
         with open(self.tail_fn, "rb") as f:
             f.seek(block_start_index * PAGE_SIZE)
             for i in range(self.num_columns + META_DATA_PAGES):
                 page_set.pages[i].data = f.read(PAGE_SIZE)
-
+        LOCK_MANAGER.latches[DISK_ACCESS].release()
         return page_set
 
     def write_tail_page_set(self, page_set, block_start_index):
+        LOCK_MANAGER.latches[DISK_ACCESS].acquire()
         with open(self.tail_fn, "r+b") as f:
             file_size = os.path.getsize(self.tail_fn)
             if file_size < block_start_index * PAGE_SIZE:
@@ -246,6 +251,7 @@ class Disk:
             f.seek(block_start_index * PAGE_SIZE)
             for i in range(self.num_columns + META_DATA_PAGES):
                 f.write(page_set.pages[i].data)
+        LOCK_MANAGER.latches[DISK_ACCESS].release()
 
     def get_next_tail_block(self):
         block_num = self.next_tail_block
