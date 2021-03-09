@@ -81,7 +81,7 @@ for transaction_worker in transaction_workers:
 db.close()
 db = Database()
 db.open('./ECS165')
-grades_table = db.create_table('Grades', 5, 0)
+grades_table = db.get_table('Grades')
 
 score = len(keys)
 
