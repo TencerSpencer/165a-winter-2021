@@ -66,9 +66,7 @@ class Query:
                     return False
         elif column != self.table.key:
             # iterate over selections to see if the selected col value in column column == key
-            keys = []
-            with self.table.keyLock:
-                keys = self.table.keys.keys().deepcopy()
+            keys = self.table.safe_get_keys()
             for globalKey in keys:
                 record = self.table.select_record(globalKey, [1]*self.table.num_columns)
                 if not record:

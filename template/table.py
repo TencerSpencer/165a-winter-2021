@@ -66,6 +66,10 @@ class Table:
     def set_index(self, index):
         self.index = index
 
+    def safe_get_keys(self):
+        with self.keyLock:
+            return copy.deepcopy(list(self.keys.keys()))
+
     def select_record_using_rid(self, rid, query_columns):
         self.__check_if_base_loaded(rid)
         page_range_index = self.page_directory[rid][0]

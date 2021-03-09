@@ -5,15 +5,14 @@ A data structure holding indices for various columns of a table. Key column shou
 In-Memory ONLY
 """
 
-
 class Index:
 
     def __init__(self, table):
-        self.lock = threading.Lock()
         table.set_index(self)
         self.table = table
         self.indices = [None] * table.num_columns
         self.isBuilt = [False] * table.num_columns
+        self.locks = [threading.Lock()] * table.num_columns
         for i in range(table.num_columns):
             self.indices[i] = RHash()
 
@@ -22,7 +21,7 @@ class Index:
     """
 
     def locate(self, column, value):
-        with self.lock:
+        with self.locks[column]:
             return self.indices[column].get(value)
 
     """
@@ -30,7 +29,7 @@ class Index:
     """
 
     def locate_range(self, column, begin, end):
-        with self.lock:
+        with self.locks[column]:
             return self.indices[column].get_range(begin, end)
 
     """
@@ -38,11 +37,12 @@ class Index:
     """
 
     def create_index(self, column_number):
-        with self.lock:
+        with self.locks[column_number]:
             query_cols = [None] * self.table.num_columns
             query_cols[column_number] = 1
             # [None, None, 1, None, None]
-            for key in self.table.keys:
+            keys = self.table.safe_get_keys()
+            for key in keys:
                 record = self.table.select_record(key, query_cols)
                 self.indices[column_number].insert(record[1][column_number], record[0], False)
             self.indices[column_number].check_and_build_seeds(False)
@@ -51,7 +51,7 @@ class Index:
     """ Checks if the index is built for column 'column' """
 
     def is_index_built(self, column_number):
-        with self.lock:
+        with self.locks[column_number]:
             if column_number >= self.table.num_columns:
                 return False
             return self.isBuilt[column_number]
@@ -61,40 +61,45 @@ class Index:
     """
 
     def drop_index(self, column_number):
-        self.indices[column_number] = RHash()
-        self.isBuilt[column_number] = False
+        with self.locks[column_number]:
+            self.indices[column_number] = RHash()
+            self.isBuilt[column_number] = False
 
     """Sum over the specified range"""
 
     def get_sum(self, column, begin, end):
-        return self.indices[column].get_sum(begin, end)
+        with self.locks[column]:
+            return self.indices[column].get_sum(begin, end)
 
     """ Update the rid of the provided value in the provided column"""
 
     def update_rid(self, column_number, value, old_rid, new_rid):
-        if column_number >= self.table.num_columns:
-            return
-        self.indices[column_number].remove(value, old_rid)
-        self.indices[column_number].insert(value, new_rid)
+        with self.locks[column_number]:
+            if column_number >= self.table.num_columns:
+                return
+            self.indices[column_number].remove(value, old_rid)
+            self.indices[column_number].insert(value, new_rid)
 
     """ Update the value of the provided column and rid """
 
     def update_value(self, column_number, old_value, new_value, rid):
-        if column_number >= self.table.num_columns:
-            return
-        # print("Removing Col: " + str(column_number) + " Value: " + str(old_value) + " RID: " + str(rid))
-        self.indices[column_number].remove(old_value, rid)
-        self.indices[column_number].insert(new_value, rid, True)
+        with self.locks[column_number]:
+            if column_number >= self.table.num_columns:
+                return
+            self.indices[column_number].remove(old_value, rid)
+            self.indices[column_number].insert(new_value, rid, True)
 
     def insert_into_index(self, column_number, value, rid):
-        if column_number >= self.table.num_columns:
-            return
-        self.indices[column_number].insert(value, rid, True)
+        with self.locks[column_number]:
+            if column_number >= self.table.num_columns:
+                return
+            self.indices[column_number].insert(value, rid, True)
 
     def delete(self, column_number, value, rid):
-        if column_number >= self.table.num_columns:
-            return
-        self.indices[column_number].remove(value, rid)
+        with self.locks[column_number]:
+            if column_number >= self.table.num_columns:
+                return
+            self.indices[column_number].remove(value, rid)
 
 
 
