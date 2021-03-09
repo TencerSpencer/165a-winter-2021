@@ -24,7 +24,7 @@ class Query:
 
     def delete(self, key):
         # Remove all entries from built indices
-        rid, columns = self.table.select_record(key, [1] * self.table.num_columns)
+        rid, columns = self.table.select_record(key, [1]*self.table.num_columns)
         if self.table.index != None:
             for i in range(self.table.num_columns):
                 if self.table.index.is_index_built(i):
@@ -67,11 +67,10 @@ class Query:
                 else:
                     return False
         elif column != self.table.key:
-           # LOCK_MANAGER.latches[PAGE_DIR].acquire()
             # iterate over selections to see if the selected col value in column column == key
-            all_keys = self.table.keys.keys()
-            for globalKey in all_keys:
-                record = self.table.select_record(globalKey, [1] * self.table.num_columns)
+            keys = self.table.safe_get_keys()
+            for globalKey in keys:
+                record = self.table.select_record(globalKey, [1]*self.table.num_columns)
                 if not record:
                     return False
                 if record[1][column] == key:
@@ -97,7 +96,6 @@ class Query:
         return output
 
     """ INCLUSIVE!!!"""
-
     def select_range(self, begin, end, column, query_columns):
         data = []
         if self.table.index != None and self.table.index.is_index_built(column):
