@@ -176,6 +176,7 @@ class Bufferpool:
         return (table_name, page_range_index, page_set_index, set_type) in self.dirty_page_sets
 
     # called from table when the ref counter needs to be dec/removed
+    # TODO: This need to be changed up as well to check if it was previously removed or not so that threads do not waste time
     def unpin_page_set(self, table_name, page_range_index, page_set_index, set_type):
         LOCK_MANAGER.latches[UNPIN_PAGE_SET].acquire()
         self.pinned_page_sets[(table_name, page_range_index, page_set_index, set_type)] -= 1

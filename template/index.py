@@ -22,11 +22,7 @@ class Index:
     """
 
     def locate(self, column, value):
-<<<<<<< HEAD
-        with self.lock:
-=======
         with self.locks[column]:
->>>>>>> index-order-dev
             return self.indices[column].get(value)
 
     """
@@ -34,11 +30,7 @@ class Index:
     """
 
     def locate_range(self, column, begin, end):
-<<<<<<< HEAD
-        with self.lock:
-=======
         with self.locks[column]:
->>>>>>> index-order-dev
             return self.indices[column].get_range(begin, end)
 
     """
@@ -46,20 +38,12 @@ class Index:
     """
 
     def create_index(self, column_number):
-<<<<<<< HEAD
-        with self.lock:
-            query_cols = [None] * self.table.num_columns
-            query_cols[column_number] = 1
-            # [None, None, 1, None, None]
-            for key in self.table.keys:
-=======
         with self.locks[column_number]:
             query_cols = [None] * self.table.num_columns
             query_cols[column_number] = 1
             # [None, None, 1, None, None]
             keys = self.table.safe_get_keys()
             for key in keys:
->>>>>>> index-order-dev
                 record = self.table.select_record(key, query_cols)
                 self.indices[column_number].insert(record[1][column_number], record[0], False)
             self.indices[column_number].check_and_build_seeds(False)
@@ -68,11 +52,7 @@ class Index:
     """ Checks if the index is built for column 'column' """
 
     def is_index_built(self, column_number):
-<<<<<<< HEAD
-        with self.lock:
-=======
         with self.locks[column_number]:
->>>>>>> index-order-dev
             if column_number >= self.table.num_columns:
                 return False
             return self.isBuilt[column_number]
