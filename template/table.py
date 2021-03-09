@@ -205,7 +205,7 @@ class Table:
             self.trid_block_start[rid] = block_start_index
 
     def insert_record(self, *columns):
-
+        # TODO: need to return false if key already exists before incrementing rid
         key_col = self.key
         cols = list(columns)
         key = cols[key_col]
