@@ -1,5 +1,7 @@
 from template.table import Table, Record
 from template.index import Index
+from template.lock_manager_config import *
+import copy
 
 
 class Query:
@@ -65,14 +67,17 @@ class Query:
                 else:
                     return False
         elif column != self.table.key:
+           # LOCK_MANAGER.latches[PAGE_DIR].acquire()
             # iterate over selections to see if the selected col value in column column == key
-            for globalKey in self.table.keys.keys():
+            all_keys = self.table.keys.keys()
+            for globalKey in all_keys:
                 record = self.table.select_record(globalKey, [1] * self.table.num_columns)
                 if not record:
                     return False
                 if record[1][column] == key:
                     # Found a match, add it to data
                     data.append(Record(record[0], globalKey, self.__trim(record[1], query_columns)))
+           # LOCK_MANAGER.latches[PAGE_DIR].release()
         else:
             data = self.table.select_record(key, query_columns)
             if data:

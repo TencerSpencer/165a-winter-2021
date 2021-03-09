@@ -47,12 +47,13 @@ class Bufferpool:
         return data
 
     def __load_page_set(self, disk, num_columns, set_type, block_start_index):
+        
+        LOCK_MANAGER.latches[DISK_ACCESS].acquire()
         # we must first evict pages before we load them in
         self.__ensure_buffer_pool_can_fit_new_data(num_columns)
 
         data = None
 
-        LOCK_MANAGER.latches[DISK_ACCESS].acquire()
         if set_type == BASE_RID_TYPE:
             data = disk.read_base_page_set(block_start_index)
 
@@ -64,6 +65,7 @@ class Bufferpool:
 
     # kick out least recently used page from queue
     def __ensure_buffer_pool_can_fit_new_data(self, num_columns):
+        LOCK_MANAGER.latches[BUFFER_POOL_SPACE].acquire()
         # we must be careful here, due to the fact that dequeue will throw a max size exception. I may need to catch it somewhere
         while len(self.lru_enforcement) + num_columns + META_DATA_PAGES > MAX_PAGES_IN_BUFFER:
             table_name, page_range_index, page_set_index, set_type = self.lru_enforcement.popleft()
@@ -78,8 +80,13 @@ class Bufferpool:
             else:
                 self.__evict_page_set(table_name, page_range_index, page_set_index, set_type)
 
+        LOCK_MANAGER.latches[BUFFER_POOL_SPACE].release()
+
     # evaluate if page is dirty then remove any traces
     def __evict_page_set(self, table_name, page_range_index, page_set_index, set_type):
+        
+        LOCK_MANAGER.latches[PAGE_SET_EVICTION].acquire()
+        
         if self.__is_dirty(table_name, page_range_index, page_set_index, set_type):
             table = self.tables[table_name]
             table.disk.next_base_rid = table.next_base_rid
@@ -125,6 +132,8 @@ class Bufferpool:
                 current_page_range.tail_timestamps.pop(offset)
                 current_page_range.tail_rids.pop(rids[i])
             current_page_range.tail_page_sets.pop(page_set_index)
+        
+        LOCK_MANAGER.latches[PAGE_SET_EVICTION].release()
 
 
 
@@ -169,6 +178,7 @@ class Bufferpool:
 
     # write dirty data to disk
     def flush_buffer_pool(self):
+        
         for table in self.tables.values():
             table.disk.next_base_rid = table.next_base_rid
             table.disk.next_tail_rid = table.next_tail_rid

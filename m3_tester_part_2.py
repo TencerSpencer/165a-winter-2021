@@ -76,10 +76,15 @@ for j in range(0, num_threads):
 for transaction_worker in transaction_workers:
     transaction_worker.run()
 
+# as per the TA's instructions, we will close and open the database,
+
+db.close()
+db = Database()
+db.open('./ECS165')
+grades_table = db.create_table('Grades', 5, 0)
+
 score = len(keys)
-for _ in range(len(LOCK_MANAGER.workers_list)):
-    current_thread_to_join = LOCK_MANAGER.workers_list.pop()
-    current_thread_to_join.join()
+
 for key in keys:
     correct = records[key]
     query = Query(grades_table)

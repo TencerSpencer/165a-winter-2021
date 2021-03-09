@@ -189,12 +189,16 @@ class Table:
     # page_range.base_page_sets[base_page_set_index] = base_page_set
 
     def __add_brids_to_page_directory(self, brids, indir, indir_t, page_range_index, page_set_index):
+        # If we are using self.table.keys.keys() for things, we need to lock whenever we make additions to the table, i.e. here
+        #LOCK_MANAGER.latches[PAGE_DIR].acquire()
         for i in range(len(brids)):
             self.page_directory[brids[i]] = (page_range_index, page_set_index)
             if indir_t[i] == TAIL_RID_TYPE or indir_t[i] == DELETED_WT_RID_TYPE:
                 self.brid_to_trid[brids[i]] = indir[i]
             else:
                 self.brid_to_trid[brids[i]] = None
+
+        #LOCK_MANAGER.latches[PAGE_DIR].release()
 
     def __add_trids_to_key_directory_info(self, trids, block_start_index):
         for rid in trids:
@@ -335,6 +339,7 @@ class Table:
         LOCK_MANAGER.latches[NEXT_TAIL_BLOCK_CALC].release()
         return block
 
+    # Possible mutex here due to length check
     def __tail_page_sets_full(self, page_set_index, page_range_index):
         if len(self.page_ranges[page_range_index].tail_page_sets) == 0:
             return True
