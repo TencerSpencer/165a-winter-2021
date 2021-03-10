@@ -13,94 +13,112 @@ class Index:
         self.table = table
         self.indices = [None] * table.num_columns
         self.isBuilt = [False] * table.num_columns
-        self.locks = [threading.Lock()] * table.num_columns
+        # self.locks = [threading.Lock()] * table.num_columns
+        self.rw_locks = [ReadWriteLock()] * table.num_columns
         for i in range(table.num_columns):
             self.indices[i] = RHash()
 
     """
     # returns the location (RID?) of all records with the given value on column "column"
     """
-
     def locate(self, column, value):
-        with self.locks[column]:
-            return self.indices[column].get(value)
+        self.rw_locks[column].acquire_read()
+        output = self.indices[column].get(value)
+        self.rw_locks[column].release_read()
+        return output
 
     """
     # Returns the RIDs of all records with values in column "column" between "begin" and "end"
     """
 
     def locate_range(self, column, begin, end):
-        with self.locks[column]:
-            return self.indices[column].get_range(begin, end)
-
+        self.rw_locks[column].acquire_read()
+        output = self.indices[column].get_range(begin, end)
+        self.rw_locks[column].release_read()
+        return output
     """
     # optional: Create index on specific column
     """
 
     def create_index(self, column_number):
-        with self.locks[column_number]:
-            query_cols = [None] * self.table.num_columns
-            query_cols[column_number] = 1
-            # [None, None, 1, None, None]
-            keys = self.table.safe_get_keys()
-            for key in keys:
-                record = self.table.select_record(key, query_cols)
-                self.indices[column_number].insert(record[1][column_number], record[0], False)
-            self.indices[column_number].check_and_build_seeds(False)
-            self.isBuilt[column_number] = True
+        self.rw_locks[column_number].acquire_write()
+        query_cols = [None] * self.table.num_columns
+        query_cols[column_number] = 1
+        # [None, None, 1, None, None]
+        keys = self.table.safe_get_keys()
+        for key in keys:
+            record = self.table.select_record(key, query_cols)
+            self.indices[column_number].insert(record[1][column_number], record[0], False)
+        self.indices[column_number].check_and_build_seeds(False)
+        self.isBuilt[column_number] = True
+        self.rw_locks[column_number].release_write()
 
     """ Checks if the index is built for column 'column' """
 
     def is_index_built(self, column_number):
-        with self.locks[column_number]:
-            if column_number >= self.table.num_columns:
-                return False
-            return self.isBuilt[column_number]
-
+        if column_number >= self.table.num_columns:
+            return False
+        self.rw_locks[column_number].acquire_read()
+        output = self.isBuilt[column_number]
+        self.rw_locks[column_number].release_read()
+        return output 
+       
     """
     # optional: Drop index of specific column
     """
 
     def drop_index(self, column_number):
-        with self.locks[column_number]:
-            self.indices[column_number] = RHash()
-            self.isBuilt[column_number] = False
+        self.rw_locks[column_number].acquire_read()
+        self.indices[column_number] = RHash()
+        self.isBuilt[column_number] = False
+        self.rw_locks[column_number].release_read()
 
     """Sum over the specified range"""
 
     def get_sum(self, column, begin, end):
-        with self.locks[column]:
-            return self.indices[column].get_sum(begin, end)
+        self.rw_locks[column].acquire_read()
+        output = self.indices[column].get_sum(begin, end)
+        self.rw_locks[column].release_read()
+        return output
 
     """ Update the rid of the provided value in the provided column"""
 
     def update_rid(self, column_number, value, old_rid, new_rid):
-        with self.locks[column_number]:
-            if column_number >= self.table.num_columns:
-                return
-            self.indices[column_number].remove(value, old_rid)
-            self.indices[column_number].insert(value, new_rid)
+        if column_number >= self.table.num_columns:
+            return
+        self.rw_locks[column_number].acquire_write()
+        
+        self.indices[column_number].remove(value, old_rid)
+        self.indices[column_number].insert(value, new_rid)
+        
+        self.rw_locks[column_number].release_write()
+
 
     """ Update the value of the provided column and rid """
 
     def update_value(self, column_number, old_value, new_value, rid):
-        with self.locks[column_number]:
-            if column_number >= self.table.num_columns:
-                return
-            self.indices[column_number].remove(old_value, rid)
-            self.indices[column_number].insert(new_value, rid, True)
+        if column_number >= self.table.num_columns:
+            return
+        self.rw_locks[column_number].acquire_write()
+        
+        self.indices[column_number].remove(old_value, rid)
+        self.indices[column_number].insert(new_value, rid, True)
+        
+        self.rw_locks[column_number].release_write()
 
     def insert_into_index(self, column_number, value, rid):
-        with self.locks[column_number]:
-            if column_number >= self.table.num_columns:
-                return
-            self.indices[column_number].insert(value, rid, True)
+        if column_number >= self.table.num_columns:
+            return
+        self.rw_locks[column_number].acquire_write()
+        output = self.indices[column_number].insert(value, rid, True)
+        self.rw_locks[column_number].release_write()
 
     def delete(self, column_number, value, rid):
-        with self.locks[column_number]:
-            if column_number >= self.table.num_columns:
-                return
-            self.indices[column_number].remove(value, rid)
+        if column_number >= self.table.num_columns:
+            return
+        self.rw_locks[column_number].acquire_write()
+        self.indices[column_number].remove(value, rid)
+        self.rw_locks[column_number].release_write()
 
 
 
@@ -255,7 +273,7 @@ class RHash:
                 self.check_and_build_seeds(True)
             del self.dictionary[value]
             self.check_and_build_seeds(False)
-        else:
+        elif rid in self.dictionary[value].rids:
             # just remove the rid from value array
             # print(self.dictionary[value].rids)
             self.dictionary[value].rids.remove(rid)
@@ -317,3 +335,24 @@ class RHash:
         while (node != None):
             print(node.rids)
             node = node.next_node
+
+class ReadWriteLock:
+    def __init__(self):
+        self.lock = threading.Condition(threading.Lock())
+        self.num_readers = 0
+
+    def acquire_read(self):
+        with self.lock:
+            self.num_readers += 1
+
+    def release_read(self):
+        with self.lock:
+            self.num_readers -= 1
+
+    def acquire_write(self):
+        self.lock.acquire()
+        while self.num_readers > 0:
+            self.lock.wait()
+
+    def release_write(self):
+        self.lock.release()
