@@ -338,6 +338,8 @@ class RHash:
 
 class ReadWriteLock:
     def __init__(self):
+        # Conditions allow our release_read to occur even after the lock has
+        # been acquired with acquire_write
         self.lock = threading.Condition(threading.Lock())
         self.num_readers = 0
 
