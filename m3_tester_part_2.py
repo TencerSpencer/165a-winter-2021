@@ -38,7 +38,7 @@ for i in range(num_threads):
     transaction_workers[i].add_transaction(update_transactions[i])
 worker_keys = [ {} for t in transaction_workers ]
 
-for i in range(0, 5000):
+for i in range(0, 20000):
     key = 92106429 + i
     keys.append(key)
     i = i % num_threads
