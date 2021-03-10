@@ -280,7 +280,10 @@ class Table:
         return result
 
     def update_record(self, key, *columns):
+        LOCK_MANAGER.latches[KEY_DICT].acquire()
         base_rid = self.keys[key]
+        LOCK_MANAGER.latches[KEY_DICT].release()
+
         self.__check_if_base_loaded(base_rid)
 
         page_range_index, base_page_set_index = self.page_directory[base_rid]
@@ -380,9 +383,9 @@ class Table:
         LOCK_MANAGER.latches[KEY_DICT].acquire() # I recall key "in" functions taking O(1), not entirely sure
         if key not in self.keys:
             return False
+        brid = self.keys[key]
         LOCK_MANAGER.latches[KEY_DICT].release()
 
-        brid = self.keys[key]
         self.__check_if_base_loaded(brid)
         page_range_index = self.page_directory[brid][0]
         cur_page_range = self.page_ranges[page_range_index]
@@ -433,6 +436,7 @@ class Table:
         LOCK_MANAGER.latches[TAIL_LOADED].release()
 
     def remove_record(self, key):
+        LOCK_MANAGER.latches[KEY_DICT].acquire()
         if key in self.keys:
             brid = self.keys[key]
             self.__check_if_base_loaded(brid)
@@ -443,6 +447,7 @@ class Table:
             # if we cannot write to the current base_indirection
             if not LOCK_MANAGER.acquire_write_lock(brid, BASE_RID_TYPE) or \
                     not LOCK_MANAGER.acquire_write_lock(tail_rid, TAIL_RID_TYPE):
+                LOCK_MANAGER.latches[KEY_DICT].release()
                 return False
 
             if tail_rid:
@@ -453,8 +458,10 @@ class Table:
             # swapped from TAIL_RID_TYPE to BASE_RID_TYPE.
             BUFFER_POOL.mark_as_dirty(self.name, page_range_index, page_set, BASE_RID_TYPE)
 
+            LOCK_MANAGER.latches[KEY_DICT].release()
             return True
 
+        LOCK_MANAGER.latches[KEY_DICT].release()
         return False
 
     def __increment_base_rid(self):
