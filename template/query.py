@@ -135,11 +135,13 @@ class Query:
         # if new_columns overwrites key:
         ret = self.table.update_record(key, *new_columns)
         if new_columns[self.table.key] != None:
+            LOCK_MANAGER.latches[KEY_DICT].acquire()
             rid = self.table.keys[key]
             # Remove mapping from key to rid
             del self.table.keys[key]
             # Add the new mapping
             self.table.keys[new_columns[self.table.key]] = rid
+            LOCK_MANAGER.latches[KEY_DICT].release()
         return ret
 
     """

@@ -10,12 +10,10 @@ In-Memory ONLY
 class Index:
 
     def __init__(self, table):
-        self.lock = threading.Lock()
         table.set_index(self)
         self.table = table
         self.indices = [None] * table.num_columns
         self.isBuilt = [False] * table.num_columns
-        # self.locks = [threading.Lock()] * table.num_columns
         self.rw_locks = [ReadWriteLock()] * table.num_columns
         for i in range(table.num_columns):
             self.indices[i] = RHash()
@@ -113,7 +111,7 @@ class Index:
         if column_number >= self.table.num_columns:
             return
         self.rw_locks[column_number].acquire_write()
-        output = self.indices[column_number].insert(value, rid, True)
+        self.indices[column_number].insert(value, rid, True)
         self.rw_locks[column_number].release_write()
 
     def delete(self, column_number, value, rid):
@@ -347,12 +345,20 @@ class ReadWriteLock:
         self.num_readers = 0
 
     def acquire_read(self):
-        with self.lock:
+        self.lock.acquire()
+        try:
             self.num_readers += 1
+        finally:
+            self.lock.release()
 
     def release_read(self):
-        with self.lock:
+        self.lock.acquire()
+        try:
             self.num_readers -= 1
+            if not self.num_readers:
+                self.lock.notifyAll()
+        finally:
+            self.lock.release()
 
     def acquire_write(self):
         self.lock.acquire()

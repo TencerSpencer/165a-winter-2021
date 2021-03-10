@@ -50,7 +50,7 @@ class Database():
 
         d = Disk(self.path, name, num_columns, key)
         table = d.read_table()
-        # table.index = Index(table) # DISABLING INDEXING FOR NOW
+        table.index = Index(table) # DISABLING INDEXING FOR NOW
         self.disks[name] = d
         self.tables[name] = table
         BUFFER_POOL.tables[name] = self.tables[name]
@@ -75,7 +75,7 @@ class Database():
 
         if disk:  # if disk object associated with table exists, get table from disk
             table = disk.read_table()
-            #table.index = Index(table) # DISABLING INDEXING FOR NOW
+            table.index = Index(table) # DISABLING INDEXING FOR NOW
             self.tables[name] = table
             BUFFER_POOL.tables[name] = self.tables[name]
             return table
