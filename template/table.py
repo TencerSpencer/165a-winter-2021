@@ -75,32 +75,39 @@ class Table:
             LOCK_MANAGER.latches[KEY_DICT].release()
             return copy_list
 
-    def select_record_using_rid(self, rid, query_columns):
-        self.__check_if_base_loaded(rid)
-        page_range_index = self.page_directory[rid][0]
+    def select_record_using_rid(self, brid, query_columns):
+        self.__check_if_base_loaded(brid)
+        page_range_index = self.page_directory[brid][0]
         cur_page_range = self.page_ranges[page_range_index]
 
-        tail_rid = self.brid_to_trid[rid]
+        tail_rid = self.brid_to_trid[brid]
         if tail_rid is not None:
             self.__check_if_tail_loaded(tail_rid, page_range_index)
             tail_page_set_index = cur_page_range.tail_rids.get(tail_rid)[0]
             BUFFER_POOL.pin_page_set(self.name, page_range_index, tail_page_set_index, TAIL_RID_TYPE)
+            # check if tail page set can be read
+            if not LOCK_MANAGER.acquire_read_lock(tail_rid, TAIL_RID_TYPE):
+                return False
 
-        if not self.page_ranges[page_range_index].is_valid(rid):  # check if brid has been invalidated
+        if not self.page_ranges[page_range_index].is_valid(brid):  # check if brid has been invalidated
             return False
 
-            # get base page sets,
-        base_page_set_index = cur_page_range.base_rids.get(rid)[0]
+        # get base page sets,
+        base_page_set_index = cur_page_range.base_rids.get(brid)[0]
+
+        # check is base page set can be read
+        if not LOCK_MANAGER.acquire_read_lock(brid, BASE_RID_TYPE):
+            return False
 
         BUFFER_POOL.pin_page_set(self.name, page_range_index, base_page_set_index, BASE_RID_TYPE)
 
-        data = cur_page_range.get_record(rid, query_columns)
+        data = cur_page_range.get_record(brid, query_columns)
 
         BUFFER_POOL.unpin_page_set(self.name, page_range_index, base_page_set_index, BASE_RID_TYPE)
         if tail_rid is not None:
             BUFFER_POOL.unpin_page_set(self.name, page_range_index, tail_page_set_index, TAIL_RID_TYPE)
 
-        return rid, data
+        return brid, data
 
     def __load_record_from_disk(self, rid, page_range_index, set_type):
         block_start_index = self.brid_block_start[rid] if set_type == BASE_RID_TYPE else self.trid_block_start[rid]
