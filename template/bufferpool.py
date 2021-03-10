@@ -201,7 +201,7 @@ class Bufferpool:
         LOCK_MANAGER.latches[UNPIN_PAGE_SET].acquire()
         if self.pinned_page_sets.get((table_name, page_range_index, page_set_index, set_type)) == None:
             LOCK_MANAGER.latches[UNPIN_PAGE_SET].release()
-            pass
+            return
         
         self.pinned_page_sets[(table_name, page_range_index, page_set_index, set_type)] -= 1
 
