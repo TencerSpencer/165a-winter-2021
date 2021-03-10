@@ -91,7 +91,7 @@ class Index:
         self.rw_locks[column_number].acquire_write()
 
         self.indices[column_number].remove(value, old_rid)
-        self.indices[column_number].insert(value, new_rid)
+        self.indices[column_number].insert(value, new_rid, True)
 
         self.rw_locks[column_number].release_write()
 

@@ -120,7 +120,9 @@ class Query:
     """
 
     def update(self, key, *new_columns):
+        LOCK_MANAGER.latches[KEY_DICT].acquire()
         rid = self.table.keys.get(key, None)
+        LOCK_MANAGER.latches[KEY_DICT].release()
         if rid == None:
             return False
         # Update the indices, if built
