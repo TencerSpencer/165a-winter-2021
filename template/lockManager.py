@@ -52,6 +52,9 @@ class LockManager:
         return True
 
     def __increment_read_counter(self, rid, set_type):
+        if threading.currentThread().name in self.s_locks[(rid, set_type)]:
+            return
+
         self.latches[S_LOCK_EDIT].acquire()
         self.s_locks[(rid, set_type)].append(threading.currentThread().name)
         self.latches[S_LOCK_EDIT].release()
@@ -62,6 +65,9 @@ class LockManager:
         self.latches[S_LOCK_EDIT].release()
 
     def __increment_write_counter(self, rid, set_type):
+        if threading.currentThread().name in self.x_locks[(rid, set_type)]:
+            return
+
         self.latches[X_LOCK_EDIT].acquire()
         self.x_locks[(rid, set_type)].append(threading.currentThread().name)
         self.latches[X_LOCK_EDIT].release()

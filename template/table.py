@@ -69,7 +69,6 @@ class Table:
         self.index = index
 
     def safe_get_keys(self):
-
         with self.keyLock:
             LOCK_MANAGER.latches[KEY_DICT].acquire()
             copy_list = copy.deepcopy(list(self.keys.keys()))
@@ -108,9 +107,9 @@ class Table:
 
         if set_type == BASE_RID_TYPE:
             page_set_index = block_start_index // (self.num_columns + META_DATA_PAGES)
-            data = BUFFER_POOL.get_page_set(self.name, self.num_columns, self.disk, page_range_index, page_set_index,
-                                            set_type, block_start_index)
-            page_set, brids, times, schema, indir, indir_t = Bufferpool.unpack_data(data)
+            page_set, brids, times, schema, indir, indir_t = BUFFER_POOL.get_page_set(
+                self.name, self.num_columns, self.disk, page_range_index, page_set_index,
+                set_type, block_start_index)
             if self.page_ranges.get(page_range_index) is None:  # check if page range exists
                 self.page_ranges[page_range_index] = PageRange(self.num_columns)
 
@@ -119,9 +118,9 @@ class Table:
                                                                            times, schema, indir, indir_t)
         else:
             page_set_index = len(self.page_ranges[page_range_index].tail_page_sets)
-            data = BUFFER_POOL.get_page_set(self.name, self.num_columns, self.disk, page_range_index, page_set_index,
-                                            set_type, block_start_index)
-            page_set, trids, times, schema, indir, indir_t = Bufferpool.unpack_data(data)
+            page_set, trids, times, schema, indir, indir_t = BUFFER_POOL.get_page_set(
+                self.name, self.num_columns, self.disk, page_range_index, page_set_index,
+                set_type, block_start_index)
             # this implementation will first be in mem
             self.page_ranges[page_range_index].add_tail_page_set_from_disk(page_set, page_set_index, trids,
                                                                            times, schema, indir, indir_t)
@@ -186,7 +185,7 @@ class Table:
     def __merge(self, page_range_index, base_page_set_index):
         page_range = self.page_ranges[page_range_index]
         # base_page_set = copy.deepcopy(page_range.base_page_sets[base_page_set_index])
-        
+
         LOCK_MANAGER.latches[PAGE_DIR].acquire() # lock page dir for brid iteration
         brids = [k for k, v in self.page_directory.items() if v[0] == page_range_index and v[1] == base_page_set_index]
         LOCK_MANAGER.latches[PAGE_DIR].release()
@@ -222,7 +221,6 @@ class Table:
         LOCK_MANAGER.latches[TRID_BLOCK_START].release()
 
     def insert_record(self, *columns):
-        # TODO: need to return false if key already exists before incrementing rid
         key_col = self.key
         cols = list(columns)
         key = cols[key_col]
@@ -231,7 +229,7 @@ class Table:
         new_rid = self.next_base_rid
 
         next_free_page_range_index = self.__get_next_available_page_range(new_rid)
-        next_free_base_page_set_index = (new_rid // RECORDS_PER_PAGE) % PAGE_SETS
+        next_free_base_page_set_index = self.__get_next_base_page_set(new_rid, next_free_page_range_index)
 
         if not LOCK_MANAGER.acquire_write_lock(new_rid, BASE_RID_TYPE):
             # NOTE: IT IS VERY IMPORTANT TO RELEASE HERE IF WE CANNOT ACQUIRE A WRITE LOCK.
@@ -251,7 +249,7 @@ class Table:
         # set key and rid mappings
         self.keys[key] = new_rid
         LOCK_MANAGER.latches[KEY_DICT].release()
-        
+
         LOCK_MANAGER.latches[PAGE_DIR].acquire() # lock page directory for new insertion
         self.page_directory[new_rid] = (next_free_page_range_index, next_free_base_page_set_index)
         LOCK_MANAGER.latches[PAGE_DIR].release()
@@ -282,8 +280,6 @@ class Table:
         return result
 
     def update_record(self, key, *columns):
-        # get merge handler mutex
-
         base_rid = self.keys[key]
         self.__check_if_base_loaded(base_rid)
 
@@ -303,15 +299,15 @@ class Table:
 
         tail_page_set_index = new_tail_rid // RECORDS_PER_PAGE
         if self.page_ranges[page_range_index].tail_page_sets.get(tail_page_set_index) is None:
-            page_set, _, _, _, _, _ = Bufferpool.unpack_data(
-                BUFFER_POOL.get_new_free_mem_space(self.name, page_range_index, tail_page_set_index, self.num_columns,
-                                                   TAIL_RID_TYPE))
+            page_set = BUFFER_POOL.get_new_free_mem_space(
+                self.name, page_range_index, tail_page_set_index, self.num_columns,
+                TAIL_RID_TYPE)
             self.page_ranges[page_range_index].tail_page_sets[tail_page_set_index] = page_set
         elif self.__tail_page_sets_full(tail_page_set_index, page_range_index):
             tail_page_set_index += 1
-            page_set, _, _, _, _, _ = Bufferpool.unpack_data(
-                BUFFER_POOL.get_new_free_mem_space(self.name, page_range_index, tail_page_set_index, self.num_columns,
-                                                   TAIL_RID_TYPE))
+            page_set = BUFFER_POOL.get_new_free_mem_space(
+                self.name, page_range_index, tail_page_set_index, self.num_columns,
+                TAIL_RID_TYPE)
             self.page_ranges[page_range_index].tail_page_sets[tail_page_set_index] = page_set
 
         if not LOCK_MANAGER.acquire_write_lock(new_tail_rid, TAIL_RID_TYPE) or \
@@ -445,12 +441,12 @@ class Table:
             _, tail_rid = self.page_ranges[page_range_index].base_indirections[offset]
 
             # if we cannot write to the current base_indirection
-            if not LOCK_MANAGER.acquire_write_lock(brid, BASE_RID_TYPE) or\
-                not LOCK_MANAGER.acquire_write_lock(tail_rid, TAIL_RID_TYPE):
+            if not LOCK_MANAGER.acquire_write_lock(brid, BASE_RID_TYPE) or \
+                    not LOCK_MANAGER.acquire_write_lock(tail_rid, TAIL_RID_TYPE):
                 return False
 
             if tail_rid:
-                LOCK_MANAGER.__increment_write_counter(tail_rid, TAIL_RID_TYPE)
+                LOCK_MANAGER.acquire_write_lock(tail_rid, TAIL_RID_TYPE)
                 self.page_ranges[page_range_index].base_indirections[offset] = (DELETED_WT_RID_TYPE, tail_rid)
             else:
                 self.page_ranges[page_range_index].base_indirections[offset] = (DELETED_NT_RID_TYPE, tail_rid)
@@ -472,18 +468,28 @@ class Table:
 
         # For optimization purposes, we must lessen the how often we use latches
         page_range_index = new_rid // (RECORDS_PER_PAGE * PAGE_SETS)
-        LOCK_MANAGER.latches[AVAILABLE_PAGE_RANGE].acquire()     
+        LOCK_MANAGER.latches[AVAILABLE_PAGE_RANGE].acquire()
         if self.page_ranges.get(page_range_index) is None:  # page range doesn't exist
             new_page_range = PageRange(self.num_columns)
-            for i in range(PAGE_SETS):
-                page_set, _, _, _, _, _ = Bufferpool.unpack_data(
-                    BUFFER_POOL.get_new_free_mem_space(self.name, page_range_index, i, self.num_columns, BASE_RID_TYPE))
-                new_page_range.base_page_sets[i] = page_set
             page_range_index = new_rid // (RECORDS_PER_PAGE * PAGE_SETS)
             self.page_ranges[page_range_index] = new_page_range
         
         LOCK_MANAGER.latches[AVAILABLE_PAGE_RANGE].release()
         return page_range_index
+
+    def __get_next_base_page_set(self, new_rid, page_range):
+        page_set_index = (new_rid // RECORDS_PER_PAGE) % 16
+        if new_rid % RECORDS_PER_PAGE != 0:  # check if latest page set isn't full
+            return page_set_index
+
+        LOCK_MANAGER.latches[AVAILABLE_BASE_PAGE_SET].acquire()
+        if not self.page_ranges[page_range].base_page_sets.get(page_set_index):
+            page_set = BUFFER_POOL.get_new_free_mem_space(
+                self.name, page_range, page_set_index, self.num_columns,
+                BASE_RID_TYPE)
+            self.page_ranges[page_range].base_page_sets[page_set_index] = page_set
+        LOCK_MANAGER.latches[AVAILABLE_BASE_PAGE_SET].release()
+        return page_set_index
 
     def get_meta_data(self, page_range_index, page_set_index, set_type):
         page_range = self.page_ranges[page_range_index]

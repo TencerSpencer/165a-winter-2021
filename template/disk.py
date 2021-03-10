@@ -16,8 +16,8 @@ class Disk:
         self.tail_fn = os.path.join(self.table_dir, table_name + ".tail")
         self.info_fn = os.path.join(self.table_dir, table_name + ".info")
         self.key_directory = os.path.join(self.table_dir, table_name + ".kd")
-        self.next_tail_block = 0
         if not self.__files_exist():
+            self.next_tail_block = 0
             self.num_columns = num_columns
             self.key_column = key_column
             self.next_base_rid = START_RID
@@ -123,7 +123,6 @@ class Disk:
                 else:
                     break
 
-
         return keys, brids_to_trids, base_block_starts, tail_block_starts
 
     def __cut_data_if_necessary(self, keys, brids, brids_to_trids, base_block_starts, tail_block_starts):
@@ -224,7 +223,7 @@ class Disk:
         with open(self.base_fn, "rb") as f:
             f.seek(block_start_index * PAGE_SIZE)
             for i in range(self.num_columns + META_DATA_PAGES):
-                page_set.pages[i].data = f.read(PAGE_SIZE)
+                page_set.pages[i].data = bytearray(f.read(PAGE_SIZE))
         LOCK_MANAGER.latches[DISK_ACCESS].release()
         return page_set
 
@@ -247,7 +246,7 @@ class Disk:
         with open(self.tail_fn, "rb") as f:
             f.seek(block_start_index * PAGE_SIZE)
             for i in range(self.num_columns + META_DATA_PAGES):
-                page_set.pages[i].data = f.read(PAGE_SIZE)
+                page_set.pages[i].data = bytearray(f.read(PAGE_SIZE))
         LOCK_MANAGER.latches[DISK_ACCESS].release()
         return page_set
 

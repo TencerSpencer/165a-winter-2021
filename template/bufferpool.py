@@ -31,6 +31,7 @@ class Bufferpool:
         if not self.pages_mem_mapping.get((table_name, page_range_index, page_set_index, set_type)):
            
             data = self.__load_page_set(disk, num_columns, set_type, block_start_index)
+            page_set, rids, times, schema, indir, indir_t = self.unpack_disk_data(data)
             # append datapoint to lru_enforcement and add to current page tiles
             
             LOCK_MANAGER.latches[LRU_ENFORCEMENT].acquire()
@@ -42,6 +43,7 @@ class Bufferpool:
 
         else:  # pull data from current mem
             data, _ = self.pages_mem_mapping[(table_name, page_range_index, page_set_index, set_type)]
+            page_set, rids, times, schema, indir, indir_t = self.unpack_disk_data(data)
             # reset its position in lru
             LOCK_MANAGER.latches[LRU_ENFORCEMENT].acquire()
             self.lru_enforcement.remove((table_name, page_range_index, page_set_index, set_type))
@@ -54,7 +56,7 @@ class Bufferpool:
         # pin page, for its in use
         #self.pinned_page_sets[(table_name, page_range_index, page_set_index, set_type)] = 1
         # segment data, then mark it as pinned because it is in use
-        return data
+        return page_set, rids, times, schema, indir, indir_t
 
     def __load_page_set(self, disk, num_columns, set_type, block_start_index):
         
@@ -168,13 +170,15 @@ class Bufferpool:
         self.__ensure_buffer_pool_can_fit_new_data(num_columns)
 
         data = PageSet(num_columns + META_DATA_PAGES)
+        page_set, _, _, _, _, _ = self.unpack_new_data(data)
+
         # add data to the bufferpool and LRU queue
         self.pages_mem_mapping[(table_name, page_range_index, page_set_index, set_type)] = data, num_columns
         LOCK_MANAGER.latches[LRU_ENFORCEMENT].acquire()
         self.lru_enforcement.append((table_name, page_range_index, page_set_index, set_type))
         LOCK_MANAGER.latches[LRU_ENFORCEMENT].release()
         #self.pinned_page_sets[(table_name, page_range_index, page_set_index, set_type)] = 1
-        return data
+        return page_set
 
         # also mark table_name, page_set_index as being in use right now
 
@@ -224,12 +228,17 @@ class Bufferpool:
             meta_data = table.get_meta_data(page_range_index, page_set, set_type)
             self.__write_to_disk(table_name, page_range_index, page_set, set_type, meta_data)
 
+        self.dirty_page_sets.clear()
+        self.pages_mem_mapping.clear()
+        self.lru_enforcement.clear()
+        self.tables.clear()
+        self.pinned_page_sets.clear()
+
     # allow a table to mark pagesets as dirty
     def mark_as_dirty(self, table_name, page_range_index, page_set_index, set_type):
         self.dirty_page_sets.add((table_name, page_range_index, page_set_index, set_type))
 
-    @staticmethod
-    def unpack_data(data):
+    def unpack_disk_data(self, data):
         # last 3 pages are meta data information, do something to figure this out
         num_columns = len(data.pages) - META_DATA_PAGES
         page_set = PageSet(num_columns)
@@ -268,6 +277,38 @@ class Bufferpool:
             schema = schema[0:cutoff]
             indirections = indirections[0:cutoff]
             indirection_types = indirection_types[0:cutoff]
+
+        for page in page_set.pages:
+            page.num_records = len(rids)
+
+        return page_set, rids, timestamps, schema, indirections, indirection_types
+
+    def unpack_new_data(self, data):
+        # last 3 pages are meta data information, do something to figure this out
+        num_columns = len(data.pages) - META_DATA_PAGES
+        page_set = PageSet(num_columns)
+        for i in range(num_columns):
+            page_set.pages[i] = data.pages[i]
+
+        rids = []
+        timestamps = []
+        schema = []
+        indirections = []
+        indirection_types = []
+
+        meta_start = num_columns
+        rids_data = data.pages[meta_start]
+        timestamps_data = data.pages[meta_start + 1]
+        schema_data = data.pages[meta_start + 2]
+        indirections_data = data.pages[meta_start + 3]
+        indirection_types_data = data.pages[meta_start + 4]
+
+        for i in range(RECORDS_PER_PAGE):
+            rids.append(int.from_bytes(rids_data.data[(i * 8):(i * 8) + 8], "little"))
+            timestamps.append(int.from_bytes(timestamps_data.data[(i * 8):(i * 8) + 8], "little"))
+            schema.append(int.from_bytes(schema_data.data[(i * 8):(i * 8) + 8], "little"))
+            indirections.append(int.from_bytes(indirections_data.data[(i * 8):(i * 8) + 8], "little"))
+            indirection_types.append(int.from_bytes(indirection_types_data.data[(i * 8):(i * 8) + 8], "little"))
 
         return page_set, rids, timestamps, schema, indirections, indirection_types
 
