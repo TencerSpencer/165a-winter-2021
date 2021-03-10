@@ -1,9 +1,11 @@
 import os
 import math
+from threading import Lock
 from template.page import *
 from template.pageSet import *
 from template.table import *
 from template.tools import *
+from template.lock_manager_config import *
 
 class Disk:
     def __init__(self, db_dir, table_name, num_columns, key_column):
@@ -144,10 +146,19 @@ class Disk:
     def write_key_directory_set(self, keys, brids_to_trids, base_block_starts, tail_block_starts):
         
         data = bytearray(0)
-        k = list(keys.keys())
+        
+        LOCK_MANAGER.latches[KEY_DICT].acquire()
+        k = list(keys.keys())  
         brids = list(keys.values())
+        LOCK_MANAGER.latches[KEY_DICT].release()
+        
+        LOCK_MANAGER.latches[BRID_TO_TRID].acquire()
         trids = list(brids_to_trids.values())
+        LOCK_MANAGER.latches[BRID_TO_TRID].release()
+
+        LOCK_MANAGER.latches[BRID_BLOCK_START].acquire()
         brid_block_starts = list(base_block_starts.values())
+        LOCK_MANAGER.latches[BRID_BLOCK_START].release()
 
         k_bytes = []
         brids_bytes = []

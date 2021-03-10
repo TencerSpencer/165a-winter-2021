@@ -17,7 +17,7 @@ class Record:
 class MergeHandler:
     def __init__(self):
         # setup merge variables
-        self.next_time_to_call = time.time()  # prepare consistent time callback
+        self.next_time_to_call = None
         self.thread_in_crit_section = False
         self.thread_stopped = False
 
@@ -59,6 +59,7 @@ class Table:
         self.page_ranges = {}
         self.disk = None
         self.merge_handler = MergeHandler()
+        self.merge_handler.next_time_to_call = time.time() + MERGE_TIMER_INTERVAL  # prepare consistent time callback
         # when we start the timer, any class variables assigned after may not be captured, so do it at the end
         self.merge_handler.thread = threading.Timer(self.merge_handler.next_time_to_call - time.time(),
                                                     self.__merge_callback)
@@ -68,8 +69,12 @@ class Table:
         self.index = index
 
     def safe_get_keys(self):
+
         with self.keyLock:
-            return copy.deepcopy(list(self.keys.keys()))
+            LOCK_MANAGER.latches[KEY_DICT].acquire()
+            copy_list = copy.deepcopy(list(self.keys.keys()))
+            LOCK_MANAGER.latches[KEY_DICT].release()
+            return copy_list
 
     def select_record_using_rid(self, rid, query_columns):
         self.__check_if_base_loaded(rid)
@@ -148,7 +153,7 @@ class Table:
         if self.merge_handler.thread_in_crit_section:
             # kill a certain way
             self.merge_handler.thread_stopped = True
-            self.merge_handler.thread.join()
+            self.merge_handler.thread.join() # join will freeze the previous timer, so no worries?
         else:
             self.merge_handler.thread_stopped = True
             self.merge_handler.thread.cancel()
@@ -181,7 +186,11 @@ class Table:
     def __merge(self, page_range_index, base_page_set_index):
         page_range = self.page_ranges[page_range_index]
         # base_page_set = copy.deepcopy(page_range.base_page_sets[base_page_set_index])
+        
+        LOCK_MANAGER.latches[PAGE_DIR].acquire() # lock page dir for brid iteration
         brids = [k for k, v in self.page_directory.items() if v[0] == page_range_index and v[1] == base_page_set_index]
+        LOCK_MANAGER.latches[PAGE_DIR].release()
+
         self.__check_if_base_loaded(brids[0])  # just need first one since all brids are in same page set
         for i in range(len(brids)):
             _, offset = page_range.base_rids[brids[i]]
@@ -195,19 +204,22 @@ class Table:
 
     def __add_brids_to_page_directory(self, brids, indir, indir_t, page_range_index, page_set_index):
         # If we are using self.table.keys.keys() for things, we need to lock whenever we make additions to the table, i.e. here
-        #LOCK_MANAGER.latches[PAGE_DIR].acquire()
+        LOCK_MANAGER.latches[PAGE_DIR].acquire()
         for i in range(len(brids)):
             self.page_directory[brids[i]] = (page_range_index, page_set_index)
+            LOCK_MANAGER.latches[BRID_TO_TRID].acquire()
             if indir_t[i] == TAIL_RID_TYPE or indir_t[i] == DELETED_WT_RID_TYPE:
                 self.brid_to_trid[brids[i]] = indir[i]
             else:
                 self.brid_to_trid[brids[i]] = None
-
-        #LOCK_MANAGER.latches[PAGE_DIR].release()
+            LOCK_MANAGER.latches[BRID_TO_TRID].release()
+        LOCK_MANAGER.latches[PAGE_DIR].release()
 
     def __add_trids_to_key_directory_info(self, trids, block_start_index):
+        LOCK_MANAGER.latches[TRID_BLOCK_START].acquire()
         for rid in trids:
             self.trid_block_start[rid] = block_start_index
+        LOCK_MANAGER.latches[TRID_BLOCK_START].release()
 
     def insert_record(self, *columns):
         # TODO: need to return false if key already exists before incrementing rid
@@ -235,9 +247,14 @@ class Table:
         # check if we need to load previous rid's page set since it could be incomplete
         self.__check_if_base_loaded(new_rid - 1)
 
+        LOCK_MANAGER.latches[KEY_DICT].acquire()
         # set key and rid mappings
         self.keys[key] = new_rid
+        LOCK_MANAGER.latches[KEY_DICT].release()
+        
+        LOCK_MANAGER.latches[PAGE_DIR].acquire() # lock page directory for new insertion
         self.page_directory[new_rid] = (next_free_page_range_index, next_free_base_page_set_index)
+        LOCK_MANAGER.latches[PAGE_DIR].release()
 
         # continue with inserting the record here
         curr_page_range = self.page_ranges[next_free_page_range_index]
@@ -246,8 +263,13 @@ class Table:
         BUFFER_POOL.mark_as_dirty(self.name, next_free_page_range_index, next_free_base_page_set_index, BASE_RID_TYPE)
 
         # update key directory data for base
+        LOCK_MANAGER.latches[BRID_TO_TRID].acquire()
         self.brid_to_trid[new_rid] = None
+        LOCK_MANAGER.latches[BRID_TO_TRID].release()
+
+        LOCK_MANAGER.latches[BRID_BLOCK_START].acquire()
         self.brid_block_start[new_rid] = (new_rid // RECORDS_PER_PAGE) * (self.num_columns + META_DATA_PAGES)
+        LOCK_MANAGER.latches[BRID_BLOCK_START].release()
 
         result = curr_page_range.add_record(new_rid, cols, next_free_base_page_set_index), new_rid
 
@@ -261,7 +283,6 @@ class Table:
 
     def update_record(self, key, *columns):
         # get merge handler mutex
-        self.merge_handler.update_mutex.acquire(blocking=True)
 
         base_rid = self.keys[key]
         self.__check_if_base_loaded(base_rid)
@@ -303,6 +324,7 @@ class Table:
         #LOCK_MANAGER.__increment_write_counter(base_rid, BASE_RID_TYPE)
         #LOCK_MANAGER.__increment_write_counter(new_tail_rid, TAIL_RID_TYPE)
 
+        # self.merge_handler.update_mutex.acquire(blocking=True) If we still have errors, move to here
         result = self.page_ranges[page_range_index].update_record(base_rid, new_tail_rid, columns, tail_page_set_index)
 
         # mark tail page set as dirty
@@ -317,8 +339,11 @@ class Table:
 
         # update key directory data for tail
         self.brid_to_trid[base_rid] = new_tail_rid
+        LOCK_MANAGER.latches[TRID_BLOCK_START].acquire()
         self.trid_block_start[new_tail_rid] = self.__get_tail_block(page_range_index, tail_page_set_index)
+        LOCK_MANAGER.latches[TRID_BLOCK_START].release()
 
+        self.merge_handler.update_mutex.acquire(blocking=True)
         # append to base RID to a set of RIDs to merge, only do so after update is done, but why does it seem like this is running first?
         self.merge_handler.outdated_offsets[base_rid] = (page_range_index, base_page_set_index)
 
@@ -356,8 +381,10 @@ class Table:
         return not self.page_ranges[page_range_index].tail_page_sets[page_set_index].has_capacity()
 
     def select_record(self, key, query_columns):
+        LOCK_MANAGER.latches[KEY_DICT].acquire() # I recall key "in" functions taking O(1), not entirely sure
         if key not in self.keys:
             return False
+        LOCK_MANAGER.latches[KEY_DICT].release()
 
         brid = self.keys[key]
         self.__check_if_base_loaded(brid)
@@ -465,8 +492,13 @@ class Table:
         indir = []
         indir_t = []
         if set_type == BASE_RID_TYPE:
+
+            # TODO: ADD MUTEX FOR BASE RIDS AND TAIL RIDS ITEMS
+            LOCK_MANAGER.latches[PAGE_RANGE_BASE_RID].acquire()
             rids = [k for k, v in page_range.base_rids.items() if v[0] == page_set_index]
+            LOCK_MANAGER.latches[PAGE_RANGE_BASE_RID].release()
             for i in range(len(rids)):
+                # will this need a mutex as well?
                 offset = page_range.base_rids[rids[i]][1]
                 timestamps.append(page_range.base_timestamps[offset])
                 schema.append(page_range.base_schema_encodings[offset])
@@ -474,7 +506,9 @@ class Table:
                 indir.append(temp[1])
                 indir_t.append(temp[0])
         else:
+            LOCK_MANAGER.latches[PAGE_RANGE_TAIL_RID].acquire()
             rids = [k for k, v in page_range.tail_rids.items() if v[0] == page_set_index]
+            LOCK_MANAGER.latches[PAGE_RANGE_TAIL_RID].release()
             for i in range(len(rids)):
                 offset = page_range.tail_rids[rids[i]][1]
                 timestamps.append(page_range.tail_timestamps[offset])

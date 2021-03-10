@@ -21,23 +21,33 @@ class Bufferpool:
         # consistency is important, pop_left to remove, and append to insert to the right
         # if something is re-referenced, we will remove and then append again
 
+    # DUE TO GIL, LRU lock may not be necessary, however, I use it to preserve order
     def get_page_set(self, table_name, num_columns, disk, page_range_index, page_set_index, set_type,
                      block_start_index):
 
         # if data is not in memory
         LOCK_MANAGER.latches[PAGES_MEM_MAP_BLOCK].acquire()
+        
         if not self.pages_mem_mapping.get((table_name, page_range_index, page_set_index, set_type)):
+           
             data = self.__load_page_set(disk, num_columns, set_type, block_start_index)
             # append datapoint to lru_enforcement and add to current page tiles
+            
+            LOCK_MANAGER.latches[LRU_ENFORCEMENT].acquire()
             self.lru_enforcement.append((table_name, page_range_index, page_set_index, set_type))
+            LOCK_MANAGER.latches[LRU_ENFORCEMENT].release()
+            
             # storing data with meta data packed in bufferpool
             self.pages_mem_mapping[(table_name, page_range_index, page_set_index, set_type)] = data, num_columns
 
         else:  # pull data from current mem
             data, _ = self.pages_mem_mapping[(table_name, page_range_index, page_set_index, set_type)]
             # reset its position in lru
+            LOCK_MANAGER.latches[LRU_ENFORCEMENT].acquire()
             self.lru_enforcement.remove((table_name, page_range_index, page_set_index, set_type))
             self.lru_enforcement.append((table_name, page_range_index, page_set_index, set_type))
+            LOCK_MANAGER.latches[LRU_ENFORCEMENT].release()
+
 
         LOCK_MANAGER.latches[PAGES_MEM_MAP_BLOCK].release()
 
@@ -70,13 +80,17 @@ class Bufferpool:
         LOCK_MANAGER.latches[BUFFER_POOL_SPACE].acquire()
         # we must be careful here, due to the fact that dequeue will throw a max size exception. I may need to catch it somewhere
         while len(self.lru_enforcement) + num_columns + META_DATA_PAGES > MAX_PAGES_IN_BUFFER:
+            LOCK_MANAGER.latches[LRU_ENFORCEMENT].acquire()
             table_name, page_range_index, page_set_index, set_type = self.lru_enforcement.popleft()
+            LOCK_MANAGER.latches[LRU_ENFORCEMENT].release()
 
             # page is currently pinned and we cannot evict it
             if self.pinned_page_sets.get((table_name, page_range_index, page_set_index, set_type)) != None:
                 # page is currently in use and cannot be evicted
+                LOCK_MANAGER.latches[LRU_ENFORCEMENT].acquire()
                 # add it back to the queue
                 self.lru_enforcement.append((table_name, page_range_index, page_set_index, set_type))
+                LOCK_MANAGER.latches[LRU_ENFORCEMENT].release()
 
             # page can be evicted, remove
             else:
@@ -122,7 +136,7 @@ class Bufferpool:
         # remove its base rids from the page directory
         if (set_type == 0):
 
-            # TODO: May need a page directory lock here
+            LOCK_MANAGER.latches[PAGE_DIR].acquire()
             rids = [k for k, v in current_table.page_directory.items() if v[0] == page_range_index and v[1] == page_set_index]
             for i in range(len(rids)):
                 offset = current_page_range.base_rids[rids[i]][1]
@@ -132,6 +146,7 @@ class Bufferpool:
                 current_page_range.base_timestamps.pop(offset)
                 current_page_range.base_rids.pop(rids[i])
             current_page_range.base_page_sets.pop(page_set_index)
+            LOCK_MANAGER.latches[PAGE_DIR].release()
                 
         # remove tail rids from respective base page set from page range area
         if (set_type == 1):
@@ -155,7 +170,9 @@ class Bufferpool:
         data = PageSet(num_columns + META_DATA_PAGES)
         # add data to the bufferpool and LRU queue
         self.pages_mem_mapping[(table_name, page_range_index, page_set_index, set_type)] = data, num_columns
+        LOCK_MANAGER.latches[LRU_ENFORCEMENT].acquire()
         self.lru_enforcement.append((table_name, page_range_index, page_set_index, set_type))
+        LOCK_MANAGER.latches[LRU_ENFORCEMENT].release()
         #self.pinned_page_sets[(table_name, page_range_index, page_set_index, set_type)] = 1
         return data
 
@@ -176,9 +193,12 @@ class Bufferpool:
         return (table_name, page_range_index, page_set_index, set_type) in self.dirty_page_sets
 
     # called from table when the ref counter needs to be dec/removed
-    # TODO: This need to be changed up as well to check if it was previously removed or not so that threads do not waste time
     def unpin_page_set(self, table_name, page_range_index, page_set_index, set_type):
         LOCK_MANAGER.latches[UNPIN_PAGE_SET].acquire()
+        if self.pinned_page_sets.get((table_name, page_range_index, page_set_index, set_type)) == None:
+            LOCK_MANAGER.latches[UNPIN_PAGE_SET].release()
+            pass
+        
         self.pinned_page_sets[(table_name, page_range_index, page_set_index, set_type)] -= 1
 
         # if the page is no longer in use, remove it from the mapping, in m3 we may decide to keep it
@@ -187,6 +207,7 @@ class Bufferpool:
         LOCK_MANAGER.latches[UNPIN_PAGE_SET].release()
 
     # write dirty data to disk
+    # no locks needed because this will run on the main thread after all transactions have finished
     def flush_buffer_pool(self):
         
         for table in self.tables.values():
@@ -262,13 +283,16 @@ class Bufferpool:
         disk = self.tables[table_name].disk
         if set_type is BASE_RID_TYPE:
             
-            # TODO: IS THERE SUPPOSE TO BE A LATCH HERE FOR PAGE DIRECTORY ACCESS?
             
+            LOCK_MANAGER.latches[PAGE_DIR].acquire()
             rid = [k for k, v in table.page_directory.items() if v[0] == page_range_index and v[1] == page_set_index]
+            LOCK_MANAGER.latches[PAGE_DIR].release()
             block_start_index = table.brid_block_start[rid[0]]  # just need a single rid that has the block start index
             disk.write_base_page_set(data, block_start_index)
         else:
+            LOCK_MANAGER.latches[PAGE_DIR].acquire()
             rid = [k for k, v in table.page_ranges[page_range_index].tail_rids.items() if v[0] == page_set_index]
+            LOCK_MANAGER.latches[PAGE_DIR].release()
             block_start_index = table.trid_block_start[rid[0]]  # just need a single rid that has the block start index
             disk.write_tail_page_set(data, block_start_index)
         
