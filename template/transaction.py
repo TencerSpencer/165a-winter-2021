@@ -25,7 +25,7 @@ class Transaction:
     # t = Transaction()
     # t.add_query(q.update, 0, *[None, 1, None, 2, None])
     """
-    def add_query(self, query, *args):
+    def add_query(self, query, table, *args):
         switcher = {
             "insert": INSERT_TYPE,
             "update": UPDATE_TYPE,
@@ -33,12 +33,12 @@ class Transaction:
             "delete": DELETE_TYPE
         }
 
-        self.queries.append((query, args, switcher.get(query.__name__)))
+        self.queries.append((query, table, args, switcher.get(query.__name__)))
 
     # If you choose to implement this differently this method must still return True if transaction commits or False on abort
     def run(self):
         result = None
-        for query, args, query_type in self.queries:
+        for query, table, args, query_type, in self.queries:
             if query_type == SELECT_TYPE:
                 result = query(args[0], args[1], *args[2:])
             elif query_type == UPDATE_TYPE:
@@ -49,15 +49,34 @@ class Transaction:
                 result = query(*args)
             if result is False:
                 return self.abort()
-            self.completed_queries.put((query, args, query_type))
+            self.completed_queries.put((query, table, args, query_type))
         return self.commit()
 
     def abort(self):
 
-        LOCK_MANAGER.abort(threading.currentThread().name)
+        # revert all changes made, no need to do anything for selection
+        for query, table, args, query_type in self.completed_queries:
+            if query_type == UPDATE_TYPE:           
+                
+                # get key for update
+                key = args[0]
+                table.roll_back_tail_with_key(key)
+
+            elif query_type == INSERT_TYPE:
+
+                # call removal with key
+                table.remove_record(*args)
+
+            elif query_type == DELETE_TYPE:
+                # insert removed information
+                table.insert_record(*args)
+
+        # remove locks
+        LOCK_MANAGER.shrink(threading.currentThread().name)
         return False
 
     def commit(self):
         
-        LOCK_MANAGER.commit(threading.currentThread().name)
+        # remove locks
+        LOCK_MANAGER.shrink(threading.currentThread().name)
         return True

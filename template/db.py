@@ -34,6 +34,10 @@ class Database():
 
         # write all dirty pages to disk
         BUFFER_POOL.flush_buffer_pool()
+        # clear dynamically built merge mutexes
+        LOCK_MANAGER.merge_mutexes.clear()
+
+
 
 
 

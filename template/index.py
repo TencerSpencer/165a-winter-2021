@@ -250,6 +250,9 @@ class RHash:
         return
 
     def remove(self, value, rid):
+        if self.dictionary.get(value) is None:
+            return # catch key error exception
+
         # if self.dictionary.get(value, None) == None:
         #    return
         # print(self.dictionary)

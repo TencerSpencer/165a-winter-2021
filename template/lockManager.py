@@ -2,6 +2,7 @@ import threading
 
 X_LOCK_EDIT = 55
 S_LOCK_EDIT = 56
+MERGE_MUTEX = 65
 
 class LockManager:
     def __init__(self):
@@ -10,10 +11,11 @@ class LockManager:
         self.latches = {}
         self.build_latches()
         self.workers_list = []
+        self.merge_mutexes = {} # save each thread that requires an update here
 
     def build_latches(self):
         lower_bound = 40
-        upper_bound = 65
+        upper_bound = 66
         for i in range(lower_bound, upper_bound):
             self.latches[i] = threading.Lock()
 
@@ -93,13 +95,7 @@ class LockManager:
         self.__increment_read_counter(rid, set_type)
         return True
 
-    def abort(self, thread_name):
-        self.__shrink(thread_name)
-
-    def commit(self, thread_name):
-        self.__shrink(thread_name)
-
-    def __shrink(self, thread_name):
+    def shrink(self, thread_name):
         self.latches[X_LOCK_EDIT].acquire()
         self.latches[S_LOCK_EDIT].acquire()
         x_keys = [k for k, v in self.x_locks.items() if thread_name in v]
@@ -115,3 +111,50 @@ class LockManager:
 
     def add_to_thread_list(self, thread):
         self.workers_list.append(thread)
+
+
+    # functions to handle merging mutexes, used to speed up updates
+    # merge_mutexes
+    def acquire_mutex_for_update_thread(self):
+        current_thread_name = threading.currentThread().name
+        if self.merge_mutexes.get(current_thread_name) is None:
+            self.latches[MERGE_MUTEX].acquire()
+            # build the dictonary for it, make sure to add latch
+
+            self.merge_mutexes[current_thread_name] = threading.Lock()
+            self.latches[MERGE_MUTEX].release()
+        
+        self.merge_mutexes[current_thread_name].acquire(blocking=True)
+
+    def release_mutex_for_update_thread(self):
+        current_thread_name = threading.currentThread().name
+        self.merge_mutexes[current_thread_name].release()
+
+    def acquire_mutex_for_merge_thread(self):
+        self.latches[MERGE_MUTEX].acquire()
+        keys = self.merge_mutexes.keys()
+        acquired_locks = []
+        for key in keys:
+            acquired_lock = self.merge_mutexes[key].acquire(blocking=False)
+            # if we can acquire all locks, which means no update is occurring, then we can merge
+            if acquired_lock == False:
+                if len(acquired_locks) != 0:
+                    for lock in acquired_locks:
+                        # If we did not acquire all locks, release those that we did manage to acquire
+                        self.merge_mutexes[lock].release()
+                self.latches[MERGE_MUTEX].release()
+                return False
+            else:
+                acquired_locks.append(key)
+        self.latches[MERGE_MUTEX].release()
+        return True
+
+
+    # give up all mutexes
+    def release_mutex_for_merge_thread(self):
+        self.latches[MERGE_MUTEX].acquire()
+        keys = self.merge_mutexes.keys()
+        for key in keys:
+            self.merge_mutexes[key].release()
+        pass
+        self.latches[MERGE_MUTEX].release()

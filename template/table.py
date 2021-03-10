@@ -21,10 +21,6 @@ class MergeHandler:
         self.thread_in_crit_section = False
         self.thread_stopped = False
 
-        # prevent timer from executing if we are performing an update with a mutex
-        # https://docs.python.org/3/library/threading.html#threading.Lock.acquire
-        self.update_mutex = threading.Lock()
-
         # full base page sets, need to append upon insertion
         self.full_base_page_sets = deque()  # (page_range_offset, base_page_set_offset)
 
@@ -143,12 +139,12 @@ class Table:
 
             # if no base page set is full, do not perform a merge
             if len(self.merge_handler.full_base_page_sets) != 0:
-                if (self.merge_handler.update_mutex.acquire(blocking=False) == True):
+                if (LOCK_MANAGER.acquire_mutex_for_merge_thread()):
                     # call __check_for_merge
                     self.merge_handler.thread_in_crit_section = True
                     self.__check_for_merge()
                     self.merge_handler.thread_in_crit_section = False
-                    self.merge_handler.update_mutex.release()
+                    LOCK_MANAGER.release_mutex_for_merge_thread()
 
             self.merge_handler.next_time_to_call = self.merge_handler.next_time_to_call + MERGE_TIMER_INTERVAL
             self.merge_handler.thread = threading.Timer(self.merge_handler.next_time_to_call - time.time(),
@@ -244,6 +240,14 @@ class Table:
             return False
 
         self.__increment_base_rid()
+        
+        LOCK_MANAGER.latches[KEY_DICT].acquire()
+        
+        # set key and rid mappings
+        self.keys[key] = new_rid
+       
+        LOCK_MANAGER.latches[KEY_DICT].release()
+        
         LOCK_MANAGER.latches[NEW_BASE_RID_INSERT].release()
 
         BUFFER_POOL.pin_page_set(self.name, next_free_page_range_index, next_free_base_page_set_index, BASE_RID_TYPE)
@@ -252,10 +256,6 @@ class Table:
         # check if we need to load previous rid's page set since it could be incomplete
         self.__check_if_base_loaded(new_rid - 1)
 
-        LOCK_MANAGER.latches[KEY_DICT].acquire()
-        # set key and rid mappings
-        self.keys[key] = new_rid
-        LOCK_MANAGER.latches[KEY_DICT].release()
 
         LOCK_MANAGER.latches[PAGE_DIR].acquire() # lock page directory for new insertion
         self.page_directory[new_rid] = (next_free_page_range_index, next_free_base_page_set_index)
@@ -349,7 +349,7 @@ class Table:
         self.trid_block_start[new_tail_rid] = self.__get_tail_block(page_range_index, tail_page_set_index)
         LOCK_MANAGER.latches[TRID_BLOCK_START].release()
 
-        self.merge_handler.update_mutex.acquire(blocking=True)
+        LOCK_MANAGER.acquire_mutex_for_update_thread()
         # append to base RID to a set of RIDs to merge, only do so after update is done, but why does it seem like this is running first?
         self.merge_handler.outdated_offsets[base_rid] = (page_range_index, base_page_set_index)
 
@@ -362,7 +362,7 @@ class Table:
         # self.is_write_safe(page_range_index, tail_page_set_index, TAIL_RID_TYPE) &
         # self.is_read_safe(page_range_index, base_page_set_index, BASE_RID_TYPE)):
 
-        self.merge_handler.update_mutex.release()
+        LOCK_MANAGER.release_mutex_for_update_thread()
 
         return result
 
@@ -538,3 +538,13 @@ class Table:
                 indir_t.append(temp[0])
 
         return rids, timestamps, schema, indir, indir_t
+
+
+def roll_back_tail_with_key(self, key):
+    LOCK_MANAGER.latches[KEY_DICT].acquire()
+    base_rid = self.keys[key]
+    LOCK_MANAGER.latches[KEY_DICT].release()
+
+    page_range_index = self.page_directory[base_rid][0]
+    page_range = self.page_ranges[page_range_index]
+    page_range.rollback_indirection(base_rid) 

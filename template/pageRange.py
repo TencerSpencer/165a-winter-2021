@@ -299,3 +299,16 @@ class PageRange:
         return self.base_indirections[offset][0] != DELETED_WT_RID_TYPE and \
                self.base_indirections[offset][0] != DELETED_NT_RID_TYPE and \
                self.base_indirections[offset][0] != NO_RID_TYPE
+
+    def rollback_indirection(self, base_rid):
+
+        # get latest tail_rid
+        offset = self.base_rids[base_rid][1]
+        indirection = self.base_indirections[offset][1]
+
+        # get the offset of the latest tail_rid
+        tail_offset = self.tail_rids[indirection][1]
+        indirection_prev_tail = self.tail_indirections[tail_offset]
+
+        # swap indirection of base record to previous tail
+        self.base_indirections[offset] = indirection_prev_tail 

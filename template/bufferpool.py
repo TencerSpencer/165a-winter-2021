@@ -233,6 +233,7 @@ class Bufferpool:
         self.lru_enforcement.clear()
         self.tables.clear()
         self.pinned_page_sets.clear()
+        return
 
     # allow a table to mark pagesets as dirty
     def mark_as_dirty(self, table_name, page_range_index, page_set_index, set_type):
