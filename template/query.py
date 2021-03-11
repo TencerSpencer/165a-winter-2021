@@ -39,7 +39,10 @@ class Query:
     """
 
     def insert(self, *columns):
-        status, rid = self.table.insert_record(*columns)
+        result = self.table.insert_record(*columns)
+        if result is False:
+            return False
+        status, rid = result
         if status and self.table.index != None:
             for i in range(len(columns)):
                 if self.table.index.is_index_built(i):

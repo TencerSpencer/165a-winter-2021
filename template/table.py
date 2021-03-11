@@ -235,6 +235,10 @@ class Table:
         next_free_page_range_index = self.__get_next_available_page_range(new_rid)
         next_free_base_page_set_index = self.__get_next_base_page_set(new_rid, next_free_page_range_index)
 
+        if self.keys.get(key) is not None:
+            LOCK_MANAGER.latches[NEW_BASE_RID_INSERT].release()
+            return False
+
         if not LOCK_MANAGER.acquire_write_lock(new_rid, BASE_RID_TYPE):
             # NOTE: IT IS VERY IMPORTANT TO RELEASE HERE IF WE CANNOT ACQUIRE A WRITE LOCK.
             LOCK_MANAGER.latches[NEW_BASE_RID_INSERT].release()
@@ -243,6 +247,7 @@ class Table:
         self.__increment_base_rid()
         
         LOCK_MANAGER.latches[KEY_DICT].acquire()
+
 
         # set key and rid mappings
         self.keys[key] = new_rid
