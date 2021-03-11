@@ -53,23 +53,40 @@ class Transaction:
         return self.commit()
 
     def abort(self):
-
         # revert all changes made, no need to do anything for selection
         for query, table, args, query_type in self.completed_queries:
             if query_type == UPDATE_TYPE:           
-                
                 # get key for update
                 key = args[0]
                 table.roll_back_tail_with_key(key)
-
+                # Roll back the index
+                if table.index != None:
+                    rid, record = table.select_record(key, [1]*table.num_columns)
+                    old_record = []
+                    for i in range(len(record)):
+                        if args[i] == None:
+                            old_record.append(record[i])
+                        else:
+                            old_record.append(args[i])
+                    table.index.update_all(old_record, record, rid)
             elif query_type == INSERT_TYPE:
-
+                # get the RID of this record
+                LOCK_MANAGER.latches[KEY_DICT].acquire()
+                rid = self.table.keys.get(args[0], None)
+                LOCK_MANAGER.latches[KEY_DICT].release()
                 # call removal with key
                 table.remove_record(*args)
-
+                # remove from the index
+                # since insert requires all args, we can just use args here
+                if table.index != None:
+                    table.index.remove_all(args, rid)
             elif query_type == DELETE_TYPE:
                 # insert removed information
                 table.insert_record(*args)
+                # TODO: need to update the index but we need the correct arguments
+                # assumign there is something here like "revert_indirection"...
+                rid, data = table.select_record(args[0])
+                table.index.insert_all(data, rid)
 
         # remove locks
         LOCK_MANAGER.shrink(threading.currentThread().name)
