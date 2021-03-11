@@ -15,7 +15,7 @@ class LockManager:
 
     def build_latches(self):
         lower_bound = 40
-        upper_bound = 66
+        upper_bound = 70
         for i in range(lower_bound, upper_bound):
             self.latches[i] = threading.Lock()
 

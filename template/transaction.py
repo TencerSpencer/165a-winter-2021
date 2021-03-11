@@ -16,7 +16,7 @@ class Transaction:
     """
     def __init__(self):
         self.queries = []
-        self.completed_queries = queue.LifoQueue()
+        self.completed_queries = []
 
     """
     # Adds the given query to this transaction
@@ -49,7 +49,7 @@ class Transaction:
                 result = query(*args)
             if result is False:
                 return self.abort()
-            self.completed_queries.put((query, table, args, query_type))
+            self.completed_queries.append((query, table, args, query_type))
         return self.commit()
 
     def abort(self):

@@ -224,6 +224,7 @@ class Table:
         LOCK_MANAGER.latches[TRID_BLOCK_START].release()
 
     def insert_record(self, *columns):
+        LOCK_MANAGER.latches[INSERT].acquire()
         key_col = self.key
         cols = list(columns)
         key = cols[key_col]
@@ -242,30 +243,9 @@ class Table:
         self.__increment_base_rid()
         
         LOCK_MANAGER.latches[KEY_DICT].acquire()
-        
+
         # set key and rid mappings
         self.keys[key] = new_rid
-       
-        LOCK_MANAGER.latches[KEY_DICT].release()
-        
-        LOCK_MANAGER.latches[NEW_BASE_RID_INSERT].release()
-
-        BUFFER_POOL.pin_page_set(self.name, next_free_page_range_index, next_free_base_page_set_index, BASE_RID_TYPE)
-
-        # Moved this beyond the lock manager latch to lower runtime
-        # check if we need to load previous rid's page set since it could be incomplete
-        self.__check_if_base_loaded(new_rid - 1)
-
-
-        LOCK_MANAGER.latches[PAGE_DIR].acquire() # lock page directory for new insertion
-        self.page_directory[new_rid] = (next_free_page_range_index, next_free_base_page_set_index)
-        LOCK_MANAGER.latches[PAGE_DIR].release()
-
-        # continue with inserting the record here
-        curr_page_range = self.page_ranges[next_free_page_range_index]
-
-        # mark page set as dirty
-        BUFFER_POOL.mark_as_dirty(self.name, next_free_page_range_index, next_free_base_page_set_index, BASE_RID_TYPE)
 
         # update key directory data for base
         LOCK_MANAGER.latches[BRID_TO_TRID].acquire()
@@ -276,6 +256,25 @@ class Table:
         self.brid_block_start[new_rid] = (new_rid // RECORDS_PER_PAGE) * (self.num_columns + META_DATA_PAGES)
         LOCK_MANAGER.latches[BRID_BLOCK_START].release()
 
+        LOCK_MANAGER.latches[PAGE_DIR].acquire()  # lock page directory for new insertion
+        self.page_directory[new_rid] = (next_free_page_range_index, next_free_base_page_set_index)
+        LOCK_MANAGER.latches[PAGE_DIR].release()
+
+        LOCK_MANAGER.latches[KEY_DICT].release()
+        LOCK_MANAGER.latches[NEW_BASE_RID_INSERT].release()
+
+        BUFFER_POOL.pin_page_set(self.name, next_free_page_range_index, next_free_base_page_set_index, BASE_RID_TYPE)
+
+        # Moved this beyond the lock manager latch to lower runtime
+        # check if we need to load previous rid's page set since it could be incomplete
+        self.__check_if_base_loaded(new_rid - 1)
+
+        # continue with inserting the record here
+        curr_page_range = self.page_ranges[next_free_page_range_index]
+
+        # mark page set as dirty
+        BUFFER_POOL.mark_as_dirty(self.name, next_free_page_range_index, next_free_base_page_set_index, BASE_RID_TYPE)
+
         result = curr_page_range.add_record(new_rid, cols, next_free_base_page_set_index), new_rid
 
         # check if base_page_set is full, if so, add to dequeue
@@ -283,10 +282,11 @@ class Table:
             self.merge_handler.full_base_page_sets.append((next_free_page_range_index, next_free_base_page_set_index))
 
         BUFFER_POOL.unpin_page_set(self.name, next_free_page_range_index, next_free_base_page_set_index, BASE_RID_TYPE)
-
+        LOCK_MANAGER.latches[INSERT].release()
         return result
 
     def update_record(self, key, *columns):
+        #LOCK_MANAGER.latches[UPDATE].acquire()
         LOCK_MANAGER.latches[KEY_DICT].acquire()
         base_rid = self.keys[key]
         LOCK_MANAGER.latches[KEY_DICT].release()
@@ -326,9 +326,17 @@ class Table:
             return False
 
         self.__increment_tail_rid()
+
+        # update key directory data for tail
+        LOCK_MANAGER.latches[BRID_TO_TRID].acquire()
+        self.brid_to_trid[base_rid] = new_tail_rid
+        LOCK_MANAGER.latches[BRID_TO_TRID].release()
+
+        LOCK_MANAGER.latches[TRID_BLOCK_START].acquire()
+        self.trid_block_start[new_tail_rid] = self.__get_tail_block(page_range_index, tail_page_set_index)
+        LOCK_MANAGER.latches[TRID_BLOCK_START].release()
+
         LOCK_MANAGER.latches[NEW_TAIL_RID_UPDATE].release()
-        #LOCK_MANAGER.__increment_write_counter(base_rid, BASE_RID_TYPE)
-        #LOCK_MANAGER.__increment_write_counter(new_tail_rid, TAIL_RID_TYPE)
 
         # self.merge_handler.update_mutex.acquire(blocking=True) If we still have errors, move to here
         result = self.page_ranges[page_range_index].update_record(base_rid, new_tail_rid, columns, tail_page_set_index)
@@ -343,11 +351,7 @@ class Table:
             # prev_tail_page_set = self.page_ranges[page_range_index].tail_rids[prev_tail_rid][0]
             BUFFER_POOL.pin_page_set(self.name, page_range_index, current_tail_page_set, TAIL_RID_TYPE)
 
-        # update key directory data for tail
-        self.brid_to_trid[base_rid] = new_tail_rid
-        LOCK_MANAGER.latches[TRID_BLOCK_START].acquire()
-        self.trid_block_start[new_tail_rid] = self.__get_tail_block(page_range_index, tail_page_set_index)
-        LOCK_MANAGER.latches[TRID_BLOCK_START].release()
+
 
         LOCK_MANAGER.acquire_mutex_for_update_thread()
         # append to base RID to a set of RIDs to merge, only do so after update is done, but why does it seem like this is running first?
@@ -363,7 +367,7 @@ class Table:
         # self.is_read_safe(page_range_index, base_page_set_index, BASE_RID_TYPE)):
 
         LOCK_MANAGER.release_mutex_for_update_thread()
-
+        #LOCK_MANAGER.latches[UPDATE].release()
         return result
 
     def __get_tail_block(self, page_range_index, tail_page_set):
@@ -389,6 +393,7 @@ class Table:
     def select_record(self, key, query_columns):
         LOCK_MANAGER.latches[KEY_DICT].acquire() # I recall key "in" functions taking O(1), not entirely sure
         if key not in self.keys:
+            LOCK_MANAGER.latches[KEY_DICT].release()
             return False
         brid = self.keys[key]
         LOCK_MANAGER.latches[KEY_DICT].release()
@@ -428,19 +433,23 @@ class Table:
 
     def __check_if_base_loaded(self, rid):
         page_dir_info = self.page_directory.get(rid)
+        LOCK_MANAGER.latches[WRITE_BASE_RECORD].acquire()
         LOCK_MANAGER.latches[BASE_LOADED].acquire()
         if not page_dir_info and self.brid_to_trid.get(rid) is not None:
             page_range_index = rid // (RECORDS_PER_PAGE * PAGE_SETS)
             self.__load_record_from_disk(rid, page_range_index, BASE_RID_TYPE)
         LOCK_MANAGER.latches[BASE_LOADED].release()
+        LOCK_MANAGER.latches[WRITE_BASE_RECORD].release()
 
     def __check_if_tail_loaded(self, rid, page_range_index):
+        LOCK_MANAGER.latches[WRITE_TAIL_RECORD].acquire()
         LOCK_MANAGER.latches[TAIL_LOADED].acquire()
         # check if tail page page set needs to be loaded
         if rid:
             if self.page_ranges[page_range_index].tail_rids.get(rid) is None and self.trid_block_start.get(rid) is not None:
                 self.__load_record_from_disk(rid, page_range_index, TAIL_RID_TYPE)
         LOCK_MANAGER.latches[TAIL_LOADED].release()
+        LOCK_MANAGER.latches[WRITE_TAIL_RECORD].release()
 
     def remove_record(self, key):
         LOCK_MANAGER.latches[KEY_DICT].acquire()

@@ -1,7 +1,7 @@
 from template.pageSet import PageSet
 from template.config import *
 import time
-
+from template.lock_manager_config import *
 
 class PageRange:
 
@@ -78,13 +78,14 @@ class PageRange:
         return internal_offset + (RECORDS_PER_PAGE * tail_page_set_index)
 
     def add_record(self, rid, columns, base_page_set_index):
+        LOCK_MANAGER.latches[WRITE_BASE_RECORD].acquire()
         if self.is_full():
             return False
 
         # add record to appropriate page set
         self.__write_base_record(rid, columns, base_page_set_index)
         self.num_base_records += 1
-
+        LOCK_MANAGER.latches[WRITE_BASE_RECORD].release()
         return True
 
     def get_record(self, base_record_rid, query_columns):
@@ -161,6 +162,8 @@ class PageRange:
         self.base_rids.pop(rid)
 
     def update_record(self, base_rid, tail_rid, columns, tail_page_set_index):
+        LOCK_MANAGER.latches[WRITE_BASE_RECORD].acquire()
+        LOCK_MANAGER.latches[WRITE_TAIL_RECORD].acquire()
         # get previous tail rid
         prev_base_indirection = self.__get_indirection(base_rid)
         prev_tail_rid = prev_base_indirection[1]
@@ -192,7 +195,8 @@ class PageRange:
         self.__write_tail_record(tail_rid, new_schema,
                                  (0, prev_tail_rid) if prev_tail_rid == (None, None) else (1, prev_tail_rid),
                                  new_columns, tail_page_set_index)
-
+        LOCK_MANAGER.latches[WRITE_TAIL_RECORD].release()
+        LOCK_MANAGER.latches[WRITE_BASE_RECORD].release()
         return True
 
     def __get_new_columns_for_new_tail(self, prev_tail_rid, columns):
@@ -213,7 +217,6 @@ class PageRange:
         return self.num_base_records < PAGE_SETS * RECORDS_PER_PAGE
 
     def __write_base_record(self, rid, columns, base_page_set_index):
-        #base_page_set_index = int(self.num_base_records // RECORDS_PER_PAGE)
         base_page_set = self.base_page_sets[base_page_set_index]
 
         # write data
