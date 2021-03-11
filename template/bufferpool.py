@@ -279,6 +279,11 @@ class Bufferpool:
             indirections = indirections[0:cutoff]
             indirection_types = indirection_types[0:cutoff]
 
+        for i in range(len(indirection_types)):
+            if indirection_types[i] == 0:
+                indirections[i] = None
+                indirection_types[i] = None
+
         for page in page_set.pages:
             page.num_records = len(rids)
 
@@ -376,6 +381,8 @@ class Bufferpool:
             if num:  # since indirection can be none, check if its none
                 for byte in int.to_bytes(num, length=8, byteorder="little"):
                     indirections_data.append(byte)
+            else:
+                indirections_data.extend([0] * 8)
         indirections_ba = bytearray(indirections_data)
         pad_byte_array(indirections_ba)
 
@@ -383,6 +390,8 @@ class Bufferpool:
             if num:  # since indirection type can be none, check if its none
                 for byte in int.to_bytes(num, length=8, byteorder="little"):
                     indirection_types_data.append(byte)
+            else:
+                indirection_types_data.extend([0] * 8)
         indirection_types_ba = bytearray(indirection_types_data)
         pad_byte_array(indirection_types_ba, 4)
 
