@@ -71,7 +71,8 @@ class Transaction:
                 # insert removed information
                 # this wont work because it's only the key
                 # instead, revert the indirection type using the key instead of calling insert_record
-                table.insert_record(*args)
+                #table.insert_record(*args)
+                table.roll_back_deletion(*args)
 
         # remove locks
         LOCK_MANAGER.shrink(threading.currentThread().name)

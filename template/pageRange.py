@@ -312,3 +312,20 @@ class PageRange:
 
         # swap indirection of base record to previous tail
         self.base_indirections[offset] = indirection_prev_tail 
+
+
+        
+    def rollback_base_deletion(self, base_rid):
+
+        # get latest tail_rid
+        offset = self.base_rids[base_rid][1]
+        indirection = self.base_indirections[offset]
+
+        if indirection[1] == DELETED_WT_RID_TYPE:
+            self.base_indirections[offset][1] = (indirection[1], TAIL_RID_TYPE)
+
+        elif indirection[1] == DELETED_NT_RID_TYPE:
+            self.base_indirections[offset][1] = (indirection[1], BASE_RID_TYPE)
+
+        else: 
+            print("error with reverting deletion")

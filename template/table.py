@@ -568,3 +568,13 @@ def roll_back_tail_with_key(self, key):
     page_range_index = self.page_directory[base_rid][0]
     page_range = self.page_ranges[page_range_index]
     page_range.rollback_indirection(base_rid) 
+
+
+def roll_back_deletion(self, key):
+    LOCK_MANAGER.latches[KEY_DICT].acquire()
+    base_rid = self.keys[key]
+    LOCK_MANAGER.latches[KEY_DICT].release()
+
+    page_range_index = self.page_directory[base_rid][0]
+    page_range = self.page_ranges[page_range_index]
+    page_range.rollback_base_deletion(base_rid)
