@@ -77,15 +77,12 @@ class PageRange:
         internal_offset = tail_page_set.pages[0].num_records
         return internal_offset + (RECORDS_PER_PAGE * tail_page_set_index)
 
-    def add_record(self, rid, columns, base_page_set_index):
-        LOCK_MANAGER.latches[WRITE_BASE_RECORD].acquire()
-        if self.is_full():
-            return False
+    def add_record(self, rid, columns, base_page_set_index, base_record_offset):
+        # LOCK_MANAGER.latches[WRITE_BASE_RECORD].acquire()
 
         # add record to appropriate page set
-        self.__write_base_record(rid, columns, base_page_set_index)
-        self.num_base_records += 1
-        LOCK_MANAGER.latches[WRITE_BASE_RECORD].release()
+        self.__write_base_record(rid, columns, base_page_set_index, base_record_offset)
+        # LOCK_MANAGER.latches[WRITE_BASE_RECORD].release()
         return True
 
     def get_record(self, base_record_rid, query_columns):
@@ -216,15 +213,15 @@ class PageRange:
     def has_space(self):
         return self.num_base_records < PAGE_SETS * RECORDS_PER_PAGE
 
-    def __write_base_record(self, rid, columns, base_page_set_index):
+    def __write_base_record(self, rid, columns, base_page_set_index, base_record_offset):
         base_page_set = self.base_page_sets[base_page_set_index]
 
         # write data
         for i in range(self.num_columns):
-            base_page_set.pages[i].write(columns[i])
+            base_page_set.pages[i].write_to_offset(columns[i], base_record_offset % RECORDS_PER_PAGE)
 
         # add key-value pair to base_rids where key is the rid and the value is the record offset
-        self.base_rids[rid] = (base_page_set_index, self.num_base_records)
+        self.base_rids[rid] = (base_page_set_index, base_record_offset)
         offset = self.base_rids[rid][1]
 
         # add appropriate schema encoding, indirection, and timestamp

@@ -24,6 +24,20 @@ class Page:
         self.num_records += 1
         self.write_page_lock.release()
 
+
+    def write_to_offset(self, value, offset):
+        self.write_page_lock.acquire()
+        value_in_bytes = []
+        val = value
+        for i in range(8):  # convert 64 bit value into byte sized chunks
+            value_in_bytes.append((val >> 8*i) & 0b11111111)
+
+        for i in range(8):  # add byte sized chunks to data
+            self.data[(offset * 8) + i] = value_in_bytes[i]
+
+        self.num_records += 1
+        self.write_page_lock.release()
+
     def overwrite(self, value, offset):
         self.write_page_lock.acquire()
         value_in_bytes = []

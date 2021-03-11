@@ -224,7 +224,7 @@ class Table:
         LOCK_MANAGER.latches[TRID_BLOCK_START].release()
 
     def insert_record(self, *columns):
-        LOCK_MANAGER.latches[INSERT].acquire()
+   #     LOCK_MANAGER.latches[INSERT].acquire()
         key_col = self.key
         cols = list(columns)
         key = cols[key_col]
@@ -261,7 +261,6 @@ class Table:
         LOCK_MANAGER.latches[PAGE_DIR].release()
 
         LOCK_MANAGER.latches[KEY_DICT].release()
-        LOCK_MANAGER.latches[NEW_BASE_RID_INSERT].release()
 
         BUFFER_POOL.pin_page_set(self.name, next_free_page_range_index, next_free_base_page_set_index, BASE_RID_TYPE)
 
@@ -271,18 +270,22 @@ class Table:
 
         # continue with inserting the record here
         curr_page_range = self.page_ranges[next_free_page_range_index]
+        base_record_offset = curr_page_range.num_base_records
+        curr_page_range.num_base_records += 1
+
+        LOCK_MANAGER.latches[NEW_BASE_RID_INSERT].release()
 
         # mark page set as dirty
         BUFFER_POOL.mark_as_dirty(self.name, next_free_page_range_index, next_free_base_page_set_index, BASE_RID_TYPE)
 
-        result = curr_page_range.add_record(new_rid, cols, next_free_base_page_set_index), new_rid
+        result = curr_page_range.add_record(new_rid, cols, next_free_base_page_set_index, base_record_offset), new_rid
 
         # check if base_page_set is full, if so, add to dequeue
         if not curr_page_range.base_page_sets[next_free_base_page_set_index].has_capacity():
             self.merge_handler.full_base_page_sets.append((next_free_page_range_index, next_free_base_page_set_index))
 
         BUFFER_POOL.unpin_page_set(self.name, next_free_page_range_index, next_free_base_page_set_index, BASE_RID_TYPE)
-        LOCK_MANAGER.latches[INSERT].release()
+      #  LOCK_MANAGER.latches[INSERT].release()
         return result
 
     def update_record(self, key, *columns):
