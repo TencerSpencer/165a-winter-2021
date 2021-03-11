@@ -271,7 +271,10 @@ class Table:
 
         # Moved this beyond the lock manager latch to lower runtime
         # check if we need to load previous rid's page set since it could be incomplete
-        self.__check_if_base_loaded(new_rid - 1)
+        if new_rid == 0:
+            self.__check_if_base_loaded(new_rid)
+        else:
+            self.__check_if_base_loaded(new_rid - 1)
 
         # continue with inserting the record here
         curr_page_range = self.page_ranges[next_free_page_range_index]
@@ -443,7 +446,7 @@ class Table:
         page_dir_info = self.page_directory.get(rid)
         LOCK_MANAGER.latches[WRITE_BASE_RECORD].acquire()
         LOCK_MANAGER.latches[BASE_LOADED].acquire()
-        if not page_dir_info and self.brid_to_trid.get(rid) is not None:
+        if page_dir_info is None: #and self.brid_to_trid.get(rid) is not None:
             page_range_index = rid // (RECORDS_PER_PAGE * PAGE_SETS)
             self.__load_record_from_disk(rid, page_range_index, BASE_RID_TYPE)
         LOCK_MANAGER.latches[BASE_LOADED].release()

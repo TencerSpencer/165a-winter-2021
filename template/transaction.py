@@ -65,10 +65,12 @@ class Transaction:
             elif query_type == INSERT_TYPE:
 
                 # call removal with key
-                table.remove_record(*args)
+                table.remove_record(args[0])
 
             elif query_type == DELETE_TYPE:
                 # insert removed information
+                # this wont work because it's only the key
+                # instead, revert the indirection type using the key instead of calling insert_record
                 table.insert_record(*args)
 
         # remove locks

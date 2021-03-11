@@ -14,7 +14,7 @@ grades_table = db.create_table('Grades', 5, 0)
 keys = []
 records = {}
 seed(3562901)
-num_threads = 8
+num_threads = 4
 
 try:
     grades_table.index.create_index(1)
@@ -58,43 +58,52 @@ for i in range(0, 100):
 
 # test to see if the same key can be inserted twice
 
-q = Query(grades_table)
-insert_transactions[0].add_query(q.insert, q.table, *records[keys[1]])
-worker_keys[0][key] = True
+for i in range(0, 5):
+    insert_transactions[0].add_query(q.insert, q.table, *records[keys[i]])
+    worker_keys[0][key] = True
 
-q = Query(grades_table)
-insert_transactions[1].add_query(q.insert, q.table, *records[keys[2]])
-worker_keys[1][key] = True
+# problem child :(
+#insert_transactions[0].add_query(q.insert, q.table, *records[keys[25]])
+#worker_keys[0][keys[i]] = True
 
-q = Query(grades_table)
-insert_transactions[2].add_query(q.insert, q.table, *records[keys[3]])
-worker_keys[2][key] = True
+for i in range(6, 10):
+    insert_transactions[0].add_query(q.insert, q.table, *records[keys[i]])
+    worker_keys[0][keys[i]] = True
+    
 
-q = Query(grades_table)
-# the problem child
-insert_transactions[3].add_query(q.insert, q.table, *records[keys[1]])
-worker_keys[3][key] = True
+for i in range(10, 20):
+    insert_transactions[1].add_query(q.insert, q.table, *records[keys[i]])
+    worker_keys[1][keys[i]] = True
+    
 
-q = Query(grades_table)
-insert_transactions[4].add_query(q.insert, q.table, *records[keys[4]])
-worker_keys[4][key] = True
+for i in range(20, 30):
+    insert_transactions[2].add_query(q.insert, q.table, *records[keys[i]])
+    worker_keys[2][keys[i]] = True
+    pass
 
-q = Query(grades_table)
-insert_transactions[5].add_query(q.insert, q.table, *records[keys[5]])
-worker_keys[5][key] = True
-
-q = Query(grades_table)
-insert_transactions[6].add_query(q.insert, q.table, *records[keys[6]])
-worker_keys[6][key] = True
-
-
-insert_transactions[7].add_query(q.insert, q.table, *records[keys[7]])
-worker_keys[7][key] = True
+for i in range(30, 40):
+    insert_transactions[3].add_query(q.insert, q.table, *records[keys[i]])
+    worker_keys[3][keys[i]] = True
+    pass
 
 
 for transaction_worker in transaction_workers:
     transaction_worker.run()
 
+db.close()
+db = Database()
+db.open('./ECS165')
+grades_table = db.get_table('Grades')
+
+# select records between 20 and 24 to ensure they are rolled back
+q = Query(grades_table)
+
+for i in range(20, 25):
+    result = q.select(keys[i], 0, [1, 1, 1, 1, 1])[0].columns
+    if result == False:
+        print("record was rolled back nice")
+    else:
+        print("record not rolled back ;(")
 
 
 '''
@@ -156,4 +165,4 @@ for key in keys:
 print('Score', score, '/', len(keys))
 '''
 
-db.close()
+# db.close()
