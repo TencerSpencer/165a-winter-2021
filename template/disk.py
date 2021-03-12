@@ -1,9 +1,11 @@
 import os
 import math
+from threading import Lock
 from template.page import *
 from template.pageSet import *
 from template.table import *
 from template.tools import *
+from template.lock_manager_config import *
 
 class Disk:
     def __init__(self, db_dir, table_name, num_columns, key_column):
@@ -14,8 +16,8 @@ class Disk:
         self.tail_fn = os.path.join(self.table_dir, table_name + ".tail")
         self.info_fn = os.path.join(self.table_dir, table_name + ".info")
         self.key_directory = os.path.join(self.table_dir, table_name + ".kd")
-        self.next_tail_block = 0
         if not self.__files_exist():
+            self.next_tail_block = 0
             self.num_columns = num_columns
             self.key_column = key_column
             self.next_base_rid = START_RID
@@ -121,7 +123,6 @@ class Disk:
                 else:
                     break
 
-
         return keys, brids_to_trids, base_block_starts, tail_block_starts
 
     def __cut_data_if_necessary(self, keys, brids, brids_to_trids, base_block_starts, tail_block_starts):
@@ -142,11 +143,21 @@ class Disk:
         return keys, brids, brids_to_trids, base_block_starts, tail_block_starts
 
     def write_key_directory_set(self, keys, brids_to_trids, base_block_starts, tail_block_starts):
+        
         data = bytearray(0)
-        k = list(keys.keys())
+        
+        LOCK_MANAGER.latches[KEY_DICT].acquire()
+        k = list(keys.keys())  
         brids = list(keys.values())
+        LOCK_MANAGER.latches[KEY_DICT].release()
+        
+        LOCK_MANAGER.latches[BRID_TO_TRID].acquire()
         trids = list(brids_to_trids.values())
+        LOCK_MANAGER.latches[BRID_TO_TRID].release()
+
+        LOCK_MANAGER.latches[BRID_BLOCK_START].acquire()
         brid_block_starts = list(base_block_starts.values())
+        LOCK_MANAGER.latches[BRID_BLOCK_START].release()
 
         k_bytes = []
         brids_bytes = []
@@ -207,15 +218,17 @@ class Disk:
             f.write(data)
 
     def read_base_page_set(self, block_start_index):
+        LOCK_MANAGER.latches[DISK_ACCESS].acquire()
         page_set = PageSet(self.num_columns + META_DATA_PAGES)
         with open(self.base_fn, "rb") as f:
             f.seek(block_start_index * PAGE_SIZE)
             for i in range(self.num_columns + META_DATA_PAGES):
-                page_set.pages[i].data = f.read(PAGE_SIZE)
-
+                page_set.pages[i].data = bytearray(f.read(PAGE_SIZE))
+        LOCK_MANAGER.latches[DISK_ACCESS].release()
         return page_set
 
     def write_base_page_set(self, page_set, block_start_index):
+        LOCK_MANAGER.latches[DISK_ACCESS].acquire()
         with open(self.base_fn, "r+b") as f:
             file_size = os.path.getsize(self.base_fn)
             if file_size < block_start_index * PAGE_SIZE:
@@ -225,17 +238,20 @@ class Disk:
             f.seek(block_start_index * PAGE_SIZE)
             for i in range(self.num_columns + META_DATA_PAGES):
                 f.write(page_set.pages[i].data)
+        LOCK_MANAGER.latches[DISK_ACCESS].release()
 
     def read_tail_page_set(self, block_start_index):
+        LOCK_MANAGER.latches[DISK_ACCESS].acquire()
         page_set = PageSet(self.num_columns + META_DATA_PAGES)
         with open(self.tail_fn, "rb") as f:
             f.seek(block_start_index * PAGE_SIZE)
             for i in range(self.num_columns + META_DATA_PAGES):
-                page_set.pages[i].data = f.read(PAGE_SIZE)
-
+                page_set.pages[i].data = bytearray(f.read(PAGE_SIZE))
+        LOCK_MANAGER.latches[DISK_ACCESS].release()
         return page_set
 
     def write_tail_page_set(self, page_set, block_start_index):
+        LOCK_MANAGER.latches[DISK_ACCESS].acquire()
         with open(self.tail_fn, "r+b") as f:
             file_size = os.path.getsize(self.tail_fn)
             if file_size < block_start_index * PAGE_SIZE:
@@ -245,6 +261,7 @@ class Disk:
             f.seek(block_start_index * PAGE_SIZE)
             for i in range(self.num_columns + META_DATA_PAGES):
                 f.write(page_set.pages[i].data)
+        LOCK_MANAGER.latches[DISK_ACCESS].release()
 
     def get_next_tail_block(self):
         block_num = self.next_tail_block

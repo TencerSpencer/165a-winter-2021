@@ -1,6 +1,7 @@
-from template.table import Table, Record
+import threading
 from template.query import Query
-from template.index import Index
+from template.config import *
+from template.lock_manager_config import *
 
 INSERT_TYPE = Query.insert
 UPDATE_TYPE = Query.update
@@ -14,7 +15,7 @@ class Transaction:
     """
     def __init__(self):
         self.queries = []
-        pass
+        self.completed_queries = []
 
     """
     # Adds the given query to this transaction
@@ -23,7 +24,7 @@ class Transaction:
     # t = Transaction()
     # t.add_query(q.update, 0, *[None, 1, None, 2, None])
     """
-    def add_query(self, query, *args):
+    def add_query(self, query, table, *args):
         switcher = {
             "insert": INSERT_TYPE,
             "update": UPDATE_TYPE,
@@ -31,27 +32,65 @@ class Transaction:
             "delete": DELETE_TYPE
         }
 
-        self.queries.append((query, args, switcher.get(query.__name__)))
+        self.queries.append((query, table, args, switcher.get(query.__name__)))
 
     # If you choose to implement this differently this method must still return True if transaction commits or False on abort
     def run(self):
-        for query, args, query_type in self.queries:
+        result = None
+        for query, table, args, query_type, in self.queries:
             if query_type == SELECT_TYPE:
-                pass
-            elif query_type == UPDATE_TYPE or query_type == INSERT_TYPE:
-                pass
+                result = query(args[0], args[1], *args[2:])
+            elif query_type == UPDATE_TYPE:
+                result = query(args[0], *args[1:])
+            elif query_type == INSERT_TYPE:
+                result = query(*args)
             elif query_type == DELETE_TYPE:
-                pass
-            result = query(*args)
-            # If the query has failed the transaction should abort
-            if result == False:
+                result = query(*args)
+            if result is False:
                 return self.abort()
+            self.completed_queries.append((query, table, args, query_type))
         return self.commit()
 
     def abort(self):
-        #TODO: do roll-back and any other necessary operations
+
+        # revert all changes made, no need to do anything for selection
+        while len(self.completed_queries) > 0:
+            query, table, args, query_type = self.completed_queries.pop()
+            if query_type == UPDATE_TYPE:
+                # get key for update
+                key = args[0]
+                table.roll_back_tail_with_key(args[0])
+                if table.index != None:
+                    rid, record = table.select_record(key, [1] * table.num_columns)
+                    old_record = []
+                    for i in range(len(record)):
+                        if args[i] == None:
+                            old_record.append(record[i])
+                        else:
+                            old_record.append(args[i])
+                    table.index.update_all(old_record, record, rid)
+            elif query_type == INSERT_TYPE:
+                # get the RID of this record
+                LOCK_MANAGER.latches[KEY_DICT].acquire()
+                rid = table.keys.get(args[0], None)
+                LOCK_MANAGER.latches[KEY_DICT].release()
+                # call removal with key
+                table.remove_record(args[0])
+                # remove from the index
+                # since insert requires all args, we can just use args here
+                if table.index != None:
+                    table.index.remove_all(args, rid)
+            elif query_type == DELETE_TYPE:
+                table.roll_back_deletion(args[0])
+                rid, data = table.select_record(args[0], [1] * table.num_columns)
+                table.index.insert_all(data, rid)
+
+        # remove locks
+        LOCK_MANAGER.shrink(threading.currentThread().name)
         return False
 
     def commit(self):
-        # TODO: commit to database
+        
+        # remove locks
+        LOCK_MANAGER.shrink(threading.currentThread().name)
         return True

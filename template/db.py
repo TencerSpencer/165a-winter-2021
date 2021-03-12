@@ -1,6 +1,9 @@
 from template.table import Table
 from template.disk import *
 from template.bufferpool import Bufferpool
+from template.lockManager import *
+from template.lock_manager_config import *
+from template.index import *
 
 class Database():
     def __init__(self):
@@ -18,6 +21,12 @@ class Database():
 
 
     def close(self):
+
+        # wait for all worker threads to finish executing
+        for _ in range(len(LOCK_MANAGER.workers_list)):
+            current_thread_to_join = LOCK_MANAGER.workers_list.pop()
+            current_thread_to_join.join()
+
         # when close is called, we must shutdown the timer for each table
         tables = self.tables.values()
         for table in tables:
@@ -25,6 +34,12 @@ class Database():
 
         # write all dirty pages to disk
         BUFFER_POOL.flush_buffer_pool()
+        # clear dynamically built merge mutexes
+        LOCK_MANAGER.merge_mutexes.clear()
+
+
+
+
 
     """
     # Creates a new table
@@ -39,7 +54,7 @@ class Database():
 
         d = Disk(self.path, name, num_columns, key)
         table = d.read_table()
-        table.index = Index(table)
+        table.index = Index(table) # DISABLING INDEXING FOR NOW
         self.disks[name] = d
         self.tables[name] = table
         BUFFER_POOL.tables[name] = self.tables[name]
@@ -64,7 +79,7 @@ class Database():
 
         if disk:  # if disk object associated with table exists, get table from disk
             table = disk.read_table()
-            table.index = Index(table)
+            table.index = Index(table) # DISABLING INDEXING FOR NOW
             self.tables[name] = table
             BUFFER_POOL.tables[name] = self.tables[name]
             return table

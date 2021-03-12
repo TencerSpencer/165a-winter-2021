@@ -1,5 +1,7 @@
 from template.table import Table, Record
 from template.index import Index
+from template.lock_manager_config import *
+import copy
 
 
 class Query:
@@ -21,14 +23,14 @@ class Query:
     """
 
     def delete(self, key):
-            # Remove all entries from built indices
-            rid, columns = self.table.select_record(key, [1]*self.table.num_columns)
-            if self.table.index != None:
-                for i in range(self.table.num_columns):
-                    if self.table.index.is_index_built(i):
-                        self.table.index.delete(i, columns[i], rid)
-            # Remove the record from the table
-            return self.table.remove_record(key)
+        # Remove all entries from built indices
+        rid, columns = self.table.select_record(key, [1]*self.table.num_columns)
+        if self.table.index != None:
+            for i in range(self.table.num_columns):
+                if self.table.index.is_index_built(i):
+                    self.table.index.delete(i, columns[i], rid)
+        # Remove the record from the table
+        return self.table.remove_record(key)
 
     """
     # Insert a record with specified columns
@@ -37,7 +39,10 @@ class Query:
     """
 
     def insert(self, *columns):
-        status, rid = self.table.insert_record(*columns)
+        result = self.table.insert_record(*columns)
+        if result is False:
+            return False
+        status, rid = result
         if status and self.table.index != None:
             for i in range(len(columns)):
                 if self.table.index.is_index_built(i):
@@ -56,31 +61,34 @@ class Query:
 
     def select(self, key, column, query_columns):
         data = []
-        if column != self.table.key and self.table.index != None:
-            if not self.table.index.is_index_built(column):  # if index is not built..
-                self.table.index.create_index(column)
+        if column != self.table.key and self.table.index != None and self.table.index.is_index_built(column):
             rids = self.table.index.locate(column, key)
             for rid in rids:
                 record = self.table.select_record_using_rid(rid, query_columns)
-                data.append(Record(record[0], record[1][self.table.key], record[1]))
-        elif column != self.table.key and self.table.index == None:
+                if record:
+                    data.append(Record(record[0], record[1][self.table.key], record[1]))
+                else:
+                    return False
+        elif column != self.table.key:
             # iterate over selections to see if the selected col value in column column == key
-            for globalKey in self.table.keys.keys():
+            keys = self.table.safe_get_keys()
+            for globalKey in keys:
                 record = self.table.select_record(globalKey, [1]*self.table.num_columns)
+                if not record:
+                    return False
                 if record[1][column] == key:
                     # Found a match, add it to data
                     data.append(Record(record[0], globalKey, self.__trim(record[1], query_columns)))
+           # LOCK_MANAGER.latches[PAGE_DIR].release()
         else:
             data = self.table.select_record(key, query_columns)
             if data:
-                # print([data[1]])
-                records = [Record(data[0], key, data[1])]
-                return records
-                # return [data[1]]
+                record = [Record(data[0], key, data[1])]
+                return record
         if data == False or len(data) == 0:
-            return [False]
+            return False
         return data
-    
+
     def __trim(self, to_trim, query_columns):
         output = []
         for i in range(len(to_trim)):
@@ -115,7 +123,10 @@ class Query:
     """
 
     def update(self, key, *new_columns):
+        LOCK_MANAGER.latches[KEY_DICT].acquire()
         rid = self.table.keys.get(key, None)
+        LOCK_MANAGER.latches[KEY_DICT].release()
+
         if rid == None:
             return False
         # Update the indices, if built
@@ -130,11 +141,13 @@ class Query:
         # if new_columns overwrites key:
         ret = self.table.update_record(key, *new_columns)
         if new_columns[self.table.key] != None:
+            LOCK_MANAGER.latches[KEY_DICT].acquire()
             rid = self.table.keys[key]
             # Remove mapping from key to rid
             del self.table.keys[key]
             # Add the new mapping
             self.table.keys[new_columns[self.table.key]] = rid
+            LOCK_MANAGER.latches[KEY_DICT].release()
         return ret
 
     """
