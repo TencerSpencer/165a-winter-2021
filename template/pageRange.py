@@ -178,9 +178,6 @@ class PageRange:
         # update schema for base record
         self.base_schema_encodings[base_record_offset] = new_schema
 
-        # change base and tail record indirections accordingly
-        if prev_tail_rid is None:
-            prev_tail_rid = base_rid
         self.base_indirections[base_record_offset] = (1, tail_rid)
 
         # modify the columns to be written by merging the previous tail record and new columns to write
@@ -190,7 +187,7 @@ class PageRange:
 
         # write new tail with new schema and previous tails rid
         self.__write_tail_record(tail_rid, new_schema,
-                                 (0, prev_tail_rid) if prev_tail_rid == (None, None) else (1, prev_tail_rid),
+                                 (0, base_rid) if prev_tail_rid is None else (1, prev_tail_rid),
                                  new_columns, tail_page_set_index)
         LOCK_MANAGER.latches[WRITE_TAIL_RECORD].release()
         LOCK_MANAGER.latches[WRITE_BASE_RECORD].release()
