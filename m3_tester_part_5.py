@@ -6,7 +6,7 @@ from template.config import init
 from template.lock_manager_config import *
 from random import choice, randint, sample, seed
 
-# TESTING INSERT ABORT
+# TESTING UPDATE ABORT
 init()
 db = Database()
 db.open('./ECS165')
@@ -61,30 +61,32 @@ for i in range(0, 100):
 
 for i in range(0, 5):
     insert_transactions[0].add_query(q.insert, q.table, *records[keys[i]])
-    worker_keys[0][key] = True
-
-# problem child :(
-insert_transactions[0].add_query(q.insert, q.table, *records[keys[25]])
-worker_keys[0][keys[i]] = True
 
 for i in range(6, 10):
     insert_transactions[0].add_query(q.insert, q.table, *records[keys[i]])
-    worker_keys[0][keys[i]] = True
     
 
 for i in range(10, 20):
     insert_transactions[1].add_query(q.insert, q.table, *records[keys[i]])
-    worker_keys[1][keys[i]] = True
     
 
 for i in range(20, 30):
     insert_transactions[2].add_query(q.insert, q.table, *records[keys[i]])
-    worker_keys[2][keys[i]] = True
     pass
+
+
+for i in range(20, 30):
+    test_record = [None, randint(i * 20, (i + 1) * 20), randint(i * 20, (i + 1) * 20), randint(i * 20, (i + 1) * 20), randint(i * 20, (i + 1) * 20)]
+    insert_transactions[2].add_query(q.update, q.table, keys[i], *test_record)
+    pass
+
+
+temp_record = [1,1,1,1,1]
+temp_key = -1
+insert_transactions[2].add_query(q.select, q.table, temp_key, 0, temp_record)
 
 for i in range(30, 40):
     insert_transactions[3].add_query(q.insert, q.table, *records[keys[i]])
-    worker_keys[3][keys[i]] = True
     pass
 
 
@@ -102,9 +104,10 @@ q = Query(grades_table)
 #print("testing insertion rollback")
 for i in range(20, 25):
     result = q.select(keys[i], 0, [1, 1, 1, 1, 1])
-    if result == False:
+    if result:
         print("record was rolled back nice :)")
     else:
         print("record not rolled back ;(")
 
 db.close()
+

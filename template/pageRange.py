@@ -308,10 +308,21 @@ class PageRange:
 
         # get the offset of the latest tail_rid
         tail_offset = self.tail_rids[indirection][1]
-        indirection_prev_tail = self.tail_indirections[tail_offset]
+        indirection_tail = self.tail_indirections[tail_offset]
 
-        # swap indirection of base record to previous tail
-        self.base_indirections[offset] = indirection_prev_tail 
+        
+
+        # get prior
+        indirection_prev_tail = self.tail_rids[indirection_tail[1]]
+
+        if indirection_prev_tail[0] == BASE_RID_TYPE:
+            self.base_indirections[offset] = (None, None)
+
+        else:
+            # swap indirection of base record to previous tail
+            self.base_indirections[offset] = indirection_prev_tail 
+
+        return self.base_indirections[offset][1]
 
 
         
@@ -321,11 +332,11 @@ class PageRange:
         offset = self.base_rids[base_rid][1]
         indirection = self.base_indirections[offset]
 
-        if indirection[1] == DELETED_WT_RID_TYPE:
-            self.base_indirections[offset][1] = (indirection[1], TAIL_RID_TYPE)
+        if indirection[0] == DELETED_WT_RID_TYPE:
+            self.base_indirections[offset] = (TAIL_RID_TYPE, indirection[1])
 
-        elif indirection[1] == DELETED_NT_RID_TYPE:
-            self.base_indirections[offset][1] = (indirection[1], BASE_RID_TYPE)
+        elif indirection[0] == DELETED_NT_RID_TYPE:
+            self.base_indirections[offset] = (BASE_RID_TYPE, indirection[1])
 
         else: 
             print("error with reverting deletion")

@@ -560,21 +560,21 @@ class Table:
         return rids, timestamps, schema, indir, indir_t
 
 
-def roll_back_tail_with_key(self, key):
-    LOCK_MANAGER.latches[KEY_DICT].acquire()
-    base_rid = self.keys[key]
-    LOCK_MANAGER.latches[KEY_DICT].release()
+    def roll_back_tail_with_key(self, key):
+        LOCK_MANAGER.latches[KEY_DICT].acquire()
+        base_rid = self.keys[key]
+        LOCK_MANAGER.latches[KEY_DICT].release()
 
-    page_range_index = self.page_directory[base_rid][0]
-    page_range = self.page_ranges[page_range_index]
-    page_range.rollback_indirection(base_rid) 
+        page_range_index = self.page_directory[base_rid][0]
+        page_range = self.page_ranges[page_range_index]
+        previous_tail_rid = page_range.rollback_indirection(base_rid) 
+        self.brid_to_trid[base_rid] = previous_tail_rid
 
+    def roll_back_deletion(self, key):
+        LOCK_MANAGER.latches[KEY_DICT].acquire()
+        base_rid = self.keys[key]
+        LOCK_MANAGER.latches[KEY_DICT].release()
 
-def roll_back_deletion(self, key):
-    LOCK_MANAGER.latches[KEY_DICT].acquire()
-    base_rid = self.keys[key]
-    LOCK_MANAGER.latches[KEY_DICT].release()
-
-    page_range_index = self.page_directory[base_rid][0]
-    page_range = self.page_ranges[page_range_index]
-    page_range.rollback_base_deletion(base_rid)
+        page_range_index = self.page_directory[base_rid][0]
+        page_range = self.page_ranges[page_range_index]
+        page_range.rollback_base_deletion(base_rid)

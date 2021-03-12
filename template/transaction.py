@@ -2,7 +2,6 @@ import threading
 from template.query import Query
 from template.config import *
 from template.lock_manager_config import *
-import queue
 
 INSERT_TYPE = Query.insert
 UPDATE_TYPE = Query.update
@@ -58,9 +57,7 @@ class Transaction:
         for query, table, args, query_type in self.completed_queries:
             if query_type == UPDATE_TYPE:           
                 
-                # get key for update
-                key = args[0]
-                table.roll_back_tail_with_key(key)
+                table.roll_back_tail_with_key(args[0])
 
             elif query_type == INSERT_TYPE:
 
@@ -68,11 +65,8 @@ class Transaction:
                 table.remove_record(args[0])
 
             elif query_type == DELETE_TYPE:
-                # insert removed information
-                # this wont work because it's only the key
-                # instead, revert the indirection type using the key instead of calling insert_record
-                #table.insert_record(*args)
-                table.roll_back_deletion(*args)
+
+                table.roll_back_deletion(args[0])
 
         # remove locks
         LOCK_MANAGER.shrink(threading.currentThread().name)
