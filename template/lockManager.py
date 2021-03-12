@@ -155,6 +155,8 @@ class LockManager:
         self.latches[MERGE_MUTEX].acquire()
         keys = self.merge_mutexes.keys()
         for key in keys:
-            self.merge_mutexes[key].release()
-        pass
+            try:
+                self.merge_mutexes[key].release()
+            except RuntimeError:
+                continue
         self.latches[MERGE_MUTEX].release()
