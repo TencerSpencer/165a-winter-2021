@@ -100,6 +100,8 @@ class Index:
     def update_value(self, column_number, old_value, new_value, rid):
         if column_number >= self.table.num_columns:
             return
+        if old_value == new_value:
+            return
         self.rw_locks[column_number].acquire_write()
 
         self.indices[column_number].remove(old_value, rid)
@@ -120,6 +122,21 @@ class Index:
         self.rw_locks[column_number].acquire_write()
         self.indices[column_number].remove(value, rid)
         self.rw_locks[column_number].release_write()
+
+    def update_all(self, old_values, new_values, rid):
+        for i in range(self.table.num_columns):
+            if self.is_index_built(i):
+                self.update_value(i, old_values[i], new_values[i], rid)
+
+    def remove_all(self, data, rid):
+        for i in range(self.table.num_columns):
+            if self.is_index_built(i):
+                self.delete(i, data[i], rid)
+
+    def insert_all(self, data, rid):
+        for i in range(self.table.num_columns):
+            if self.is_index_built(i):
+                self.insert_into_index(i, data[i], rid)
 
 
 class RHashNode:

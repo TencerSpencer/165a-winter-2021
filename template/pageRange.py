@@ -329,7 +329,4 @@ class PageRange:
             self.base_indirections[offset] = (TAIL_RID_TYPE, indirection[1])
 
         elif indirection[0] == DELETED_NT_RID_TYPE:
-            self.base_indirections[offset] = (BASE_RID_TYPE, indirection[1])
-
-        else: 
-            print("error with reverting deletion")
+            self.base_indirections[offset] = (None, None)

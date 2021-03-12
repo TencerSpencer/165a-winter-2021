@@ -104,7 +104,7 @@ q = Query(grades_table)
 #print("testing insertion rollback")
 for i in range(20, 25):
     result = q.select(keys[i], 0, [1, 1, 1, 1, 1])
-    if result:
+    if result is False:
         print("record was rolled back nice :)")
     else:
         print("record not rolled back ;(")
