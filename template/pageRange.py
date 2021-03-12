@@ -307,15 +307,11 @@ class PageRange:
         tail_offset = self.tail_rids[indirection][1]
         indirection_tail = self.tail_indirections[tail_offset]
 
-        
-
-        # get prior
-        indirection_prev_tail = self.tail_rids[indirection_tail[1]]
-
-        if indirection_prev_tail[0] == BASE_RID_TYPE:
+        if indirection_tail[0] == BASE_RID_TYPE:
             self.base_indirections[offset] = (None, None)
 
         else:
+            indirection_prev_tail = self.tail_rids[indirection_tail[1]]
             # swap indirection of base record to previous tail
             self.base_indirections[offset] = indirection_prev_tail 
 
